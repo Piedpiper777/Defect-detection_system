@@ -20,8 +20,8 @@ def create_app():
                 static_folder='../frontend/static')
 
     # 配置
-    app.config['SECRET_KEY'] = 'dev-secret-key-change-in-production'
-    app.config['DEBUG'] = True
+    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
+    app.config['DEBUG'] = os.getenv('FLASK_DEBUG', 'true').lower() == 'true'
 
     # 启用CORS
     CORS(app)
@@ -30,39 +30,22 @@ def create_app():
     app.register_blueprint(api_bp, url_prefix='/api')
 
     # 路由
+    def _neo4j_frontend_config():
+        return {
+            "serverUrl": os.getenv("NEO4J_URI", "bolt://localhost:7687"),
+            "serverUser": os.getenv("NEO4J_USER", "neo4j"),
+            "serverPassword": os.getenv("NEO4J_PASSWORD", "neo4j")
+        }
+
     @app.route('/')
     def index():
         """首页"""
         return render_template('index.html')
 
-    @app.route('/qa')
-    def qa():
+    @app.route('/llmkg')
+    def llmkg():
         """问答+图谱页面"""
-        return render_template('qa.html')
-
-    @app.route('/graph')
-    def graph():
-        """兼容旧链接，跳转到合并后的页面"""
-        return render_template('qa.html')
-
-    @app.route('/health')
-    def health():
-        """健康检查"""
-        try:
-            node_count = neo4j_service.get_node_count()
-            return jsonify({
-                'status': 'healthy',
-                'neo4j_connected': True,
-                'node_count': node_count,
-                'message': '系统运行正常'
-            })
-        except Exception as e:
-            return jsonify({
-                'status': 'unhealthy',
-                'neo4j_connected': False,
-                'error': str(e),
-                'message': '系统异常'
-            }), 500
+        return render_template('llmkg.html', neo4j_config=_neo4j_frontend_config())
 
     # 错误处理
     @app.errorhandler(404)

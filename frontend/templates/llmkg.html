@@ -176,6 +176,9 @@
 {% endblock %}
 
 {% block content %}
+<script id="neo4j-config" type="application/json">
+    {{ neo4j_config | default({'serverUrl': 'bolt://localhost:7687', 'serverUser': 'neo4j', 'serverPassword': 'neo4j'}) | tojson | safe }}
+</script>
 <div class="content-wrapper">
     <div class="page-header">
         <div class="header-content">
@@ -272,7 +275,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         loadingIndicator.style.display = 'flex';
 
-            fetch('/api/qa', {
+            fetch('/api/llmkg', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ question })
@@ -315,12 +318,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
     /* 图谱可视化 */
     let viz;
+    const neo4jConfig = JSON.parse(document.getElementById('neo4j-config').textContent || '{}');
     const config = {
         containerId: 'viz',
         neo4j: {
-            serverUrl: 'bolt://localhost:7687',
-            serverUser: 'neo4j',
-            serverPassword: 'detectneo4j'
+            serverUrl: neo4jConfig.serverUrl,
+            serverUser: neo4jConfig.serverUser,
+            serverPassword: neo4jConfig.serverPassword
         },
         visConfig: {
             nodes: {

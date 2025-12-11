@@ -8,14 +8,22 @@ echo ""
 # 启动Neo4j
 echo "启动Neo4j数据库..."
 
+# 加载 .env 中的配置
+if [ -f .env ]; then
+    set -a
+    # shellcheck disable=SC1091
+    source .env
+    set +a
+fi
+
 # 设置 Java 环境变量
-export JAVA_HOME="/data/zhanggu/Project/Defect_detection_system/jdk-21.0.9"
+export JAVA_HOME="${JAVA_HOME:-/data/zhanggu/Project/Defect_detection_system/jdk-21.0.9}"
 export PATH="$JAVA_HOME/bin:$PATH"
 
-# Neo4j 安装目录
-NEO4J_HOME="/data/zhanggu/Project/Defect_detection_system/neo4j-community-5.26.18"
-NEO4J_USER="neo4j"
-NEO4J_PASSWORD="detectneo4j"
+# Neo4j 安装目录与认证信息
+NEO4J_HOME="${NEO4J_HOME:-/data/zhanggu/Project/Defect_detection_system/neo4j-community-5.26.18}"
+NEO4J_USER="${NEO4J_USER:-neo4j}"
+NEO4J_PASSWORD="${NEO4J_PASSWORD:?请在 .env 中设置 NEO4J_PASSWORD}"
 
 # 切换到 Neo4j 目录并启动
 cd "$NEO4J_HOME"
@@ -75,11 +83,8 @@ FLASK_PID=$!
 echo ""
 echo "=== 系统启动完成 ==="
 echo "📊 Neo4j Browser: http://localhost:7474"
-echo "🌐 Flask应用: http://localhost:5000"
 echo "🏠 首页: http://localhost:5000/"
-echo "🔍 问答系统: http://localhost:5000/qa"
-echo "📈 图可视化: http://localhost:5000/graph"
-echo "💚 健康检查: http://localhost:5000/health"
+echo "🔍 问答系统: http://localhost:5000/llmkg"
 echo ""
 echo "按 Ctrl+C 停止服务"
 echo ""

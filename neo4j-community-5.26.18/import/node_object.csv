@@ -1,2 +1,2 @@
 object_id:ID(Object),name,:LABEL
-object001,PCB,DetectObject   
+object001,印刷电路板,DetectObject   

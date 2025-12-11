@@ -9,24 +9,6 @@ load_dotenv()
 
 api_bp = Blueprint('api', __name__)
 
-@api_bp.route('/health', methods=['GET'])
-def health_check():
-    """健康检查接口"""
-    try:
-        # 测试Neo4j连接
-        node_count = neo4j_service.get_node_count()
-        return jsonify({
-            'status': 'healthy',
-            'neo4j_connected': True,
-            'node_count': node_count
-        })
-    except Exception as e:
-        return jsonify({
-            'status': 'unhealthy',
-            'neo4j_connected': False,
-            'error': str(e)
-        }), 500
-
 @api_bp.route('/graph', methods=['GET', 'POST'])
 def graph_data():
     """获取图数据"""
@@ -135,8 +117,9 @@ def execute_query():
         }), 500
 
 
+@api_bp.route('/llmkg', methods=['POST'])
 @api_bp.route('/qa', methods=['POST'])
-def qa_answer():
+def llmkg_answer():
     """调用DeepSeek大模型进行问答"""
     data = request.get_json() or {}
     question = (data.get('question') or '').strip()

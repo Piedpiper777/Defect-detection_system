@@ -1,6 +1,11 @@
 from flask import Blueprint, request, jsonify
 from services.neo4j_service import neo4j_service
+from openai import OpenAI
 import logging
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 api_bp = Blueprint('api', __name__)
 
@@ -128,3 +133,35 @@ def execute_query():
             'success': False,
             'error': str(e)
         }), 500
+
+
+@api_bp.route('/qa', methods=['POST'])
+def qa_answer():
+    """调用DeepSeek大模型进行问答"""
+    data = request.get_json() or {}
+    question = (data.get('question') or '').strip()
+
+    if not question:
+        return jsonify({'success': False, 'error': '问题不能为空'}), 400
+
+    api_key = os.environ.get('DEEPSEEK_API_KEY')
+    if not api_key:
+        return jsonify({'success': False, 'error': '未配置 DEEPSEEK_API_KEY 环境变量'}), 500
+
+    try:
+        client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant specialized in industrial defect detection QA."},
+            {"role": "user", "content": question},
+        ]
+        completion = client.chat.completions.create(
+            model="deepseek-chat",
+            messages=messages,
+            stream=False,
+        )
+
+        answer = completion.choices[0].message.content if completion.choices else ""
+        return jsonify({'success': True, 'answer': answer})
+    except Exception as e:
+        logging.error(f"大模型调用失败: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500

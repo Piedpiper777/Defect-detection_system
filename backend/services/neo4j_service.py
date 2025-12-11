@@ -1,13 +1,22 @@
 from neo4j import GraphDatabase
+from dotenv import load_dotenv
 import logging
 import time
+import os
+
+# 加载环境变量（支持 .env）
+load_dotenv()
 
 class Neo4jService:
-    def __init__(self, uri="bolt://localhost:7687", user="neo4j", password="detectneo4j",
+    def __init__(self, uri=None, user=None, password=None,
                  max_retries=10, retry_interval=3):
-        self.uri = uri
-        self.user = user
-        self.password = password
+        # 严格模式：仅从入参或环境变量读取，不再内置任何明文默认值
+        self.uri = uri or os.getenv("NEO4J_URI")
+        self.user = user or os.getenv("NEO4J_USER")
+        self.password = password or os.getenv("NEO4J_PASSWORD")
+
+        if not self.uri or not self.user or not self.password:
+            raise ValueError("Neo4j 配置缺失：请在环境变量或初始化参数中提供 NEO4J_URI / NEO4J_USER / NEO4J_PASSWORD。")
         self.driver = None
         self.connected = False
         self.max_retries = max_retries

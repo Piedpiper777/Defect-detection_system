@@ -1,5 +1,6 @@
 from flask import Flask, render_template, jsonify
 from flask_cors import CORS
+from dotenv import load_dotenv
 import logging
 import os
 from routes.api import api_bp
@@ -8,6 +9,9 @@ from services.neo4j_service import neo4j_service
 # 配置日志
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# 加载 .env 配置
+load_dotenv()
 
 def create_app():
     """创建Flask应用"""
@@ -33,13 +37,13 @@ def create_app():
 
     @app.route('/qa')
     def qa():
-        """问答页面"""
+        """问答+图谱页面"""
         return render_template('qa.html')
 
     @app.route('/graph')
     def graph():
-        """图可视化页面"""
-        return render_template('graph_viz.html')
+        """兼容旧链接，跳转到合并后的页面"""
+        return render_template('qa.html')
 
     @app.route('/health')
     def health():

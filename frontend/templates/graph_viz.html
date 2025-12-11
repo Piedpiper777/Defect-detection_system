@@ -135,8 +135,8 @@
 
 <script>
 // 配置Neovis.js
-let viz;
-const config = {
+var viz;
+var config = {
     containerId: "viz",
     neo4j: {
         serverUrl: "bolt://localhost:7687",
@@ -145,13 +145,15 @@ const config = {
     },
     visConfig: {
         nodes: {
-            shape: "dot",
-            size: 28,
+            // 用 circle 形状让文字置于节点内部（dot 会将文字放在节点外侧）
+            shape: "circle",
+            size: 50,
+            scaling: { label: { enabled: false } },
             font: {
-                size: 14,
-                color: "#222222"
+                size: 12,
+                color: "#222"
             },
-            borderWidth: 2
+            borderWidth: 0.1
         },
         edges: {
             arrows: {
@@ -186,8 +188,17 @@ const config = {
         "Cause": { label: "name" },
         "Solution": { label: "name" }
     },
-    // 关系暂不配置文字（先保证节点文字正常显示）
-    relationships: {},
+    // 为关系开启文字：用高级配置函数返回关系类型
+    relationships: {
+        [NeoVis.NEOVIS_DEFAULT_CONFIG]: {
+            [NeoVis.NEOVIS_ADVANCED_CONFIG]: {
+                function: {
+                    // 容错：有时 rel/raw 可能为 undefined，需先判断
+                    label: (rel) => (rel?.raw?.type) || rel?.type || ""
+                }
+            }
+        }
+    },
     initialCypher: "MATCH (n)-[r]->(m) RETURN n,r,m LIMIT 25"
 };
 

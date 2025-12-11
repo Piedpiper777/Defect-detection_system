@@ -328,6 +328,12 @@
                     <span class="nav-text">缺陷检测问答</span>
                 </a>
             </div>
+            <div class="nav-item">
+                <a href="/graph" class="nav-link" id="nav-graph" data-tooltip="图数据库可视化">
+                    <div class="nav-icon"><i class="fas fa-project-diagram"></i></div>
+                    <span class="nav-text">图可视化</span>
+                </a>
+            </div>
         </div>
 
         <div class="sidebar-footer">
@@ -402,6 +408,17 @@
                     link.classList.add('active');
                 }
             });
+            
+            // 模块高亮逻辑
+            if (currentPath === '/' || currentPath === '/index') {
+                document.getElementById('nav-home')?.classList.add('active');
+            }
+            if (currentPath.startsWith('/qa')) {
+                document.getElementById('nav-qa')?.classList.add('active');
+            }
+            if (currentPath.startsWith('/graph')) {
+                document.getElementById('nav-graph')?.classList.add('active');
+            }
         });
     </script>
     {% block extra_js %}{% endblock %}

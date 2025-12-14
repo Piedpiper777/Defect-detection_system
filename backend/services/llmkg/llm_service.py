@@ -11,6 +11,65 @@ import logging
 load_dotenv()
 
 
+def normalize_keyword_spacing(cypher: str) -> str:
+    """Ensure major keywords are surrounded by spaces to avoid token glue issues."""
+    if not cypher:
+        return ''
+    pattern = r"(?i)(\bOPTIONAL\s+MATCH\b|\bORDER\s+BY\b|\bMATCH\b|\bWHERE\b|\bWITH\b|\bRETURN\b|\bLIMIT\b)"
+    spaced = re.sub(pattern, lambda m: f" {m.group(1).upper()} ", cypher)
+    spaced = re.sub(r"\s+", " ", spaced).strip()
+    return spaced
+
+
+def build_viz_cypher_from_base(base_cypher: str, default_limit: int = 100) -> str:
+    """Heuristic: if RETURN only projects properties, rewrite to return nodes/relationships for visualization."""
+    if not base_cypher:
+        return ''
+
+    cypher = normalize_keyword_spacing(base_cypher)
+
+    # Detect property projection in RETURN clause
+    ret_match = re.search(r"(?i)\bRETURN\b", cypher)
+    if not ret_match:
+        return cypher
+
+    return_part = cypher[ret_match.start():]
+    projects_properties = bool(re.search(r"(?i)\bRETURN\b[^;\n]*\b\w+\.\w+", return_part))
+
+    prefix = cypher[:ret_match.start()]
+    node_vars = [v for v in re.findall(r"\(\s*([A-Za-z][A-Za-z0-9_]*)\s*[:\)]", cypher) if v]
+    rel_vars = [r for r in re.findall(r"\[\s*([A-Za-z][A-Za-z0-9_]*)\s*[:\]]", cypher) if r]
+
+    limit_match = re.search(r"(?i)\bLIMIT\b\s+(\d+)", cypher)
+    limit_clause = f" LIMIT {limit_match.group(1)}" if limit_match else f" LIMIT {default_limit}"
+
+    # If RETURN projected only properties, switch to node/rel returns.
+    if projects_properties:
+        # Prefer to include relationships if not explicitly returned
+        rel_patterns = re.findall(r"\(\s*([A-Za-z][A-Za-z0-9_]*)[^)]*?\)-\[\s*(?::`?([A-Za-z0-9_]+)`?)?[^\]]*?\]->\(\s*([A-Za-z][A-Za-z0-9_]*)", cypher)
+        rel_type = None
+        start_var = end_var = None
+        if rel_patterns:
+            start_var, rel_type, end_var = rel_patterns[0]
+
+        if start_var and end_var:
+            rel_type_clause = f":{rel_type}" if rel_type else ''
+            # ensure node_vars contain start/end
+            if start_var not in node_vars:
+                node_vars.append(start_var)
+            if end_var not in node_vars:
+                node_vars.append(end_var)
+            rewritten = f"{prefix.strip()} WITH DISTINCT {', '.join(dict.fromkeys(node_vars))} MATCH ({start_var})-[r{rel_type_clause}]->({end_var}) RETURN {start_var}, r, {end_var}{limit_clause}"
+            return normalize_keyword_spacing(rewritten)
+
+        vars_for_return = node_vars + rel_vars
+        if vars_for_return:
+            rewritten = f"{prefix.strip()} RETURN {', '.join(dict.fromkeys(vars_for_return))}{limit_clause}"
+            return normalize_keyword_spacing(rewritten)
+
+    return cypher
+
+
 def _check_literal_entities(query: str):
     """Preflight: for patterns (:Label {name: "xxx"}) ensure such nodes exist.
 
@@ -19,8 +78,13 @@ def _check_literal_entities(query: str):
     try:
         matches = re.findall(r":`?([A-Za-z0-9_]+)`?\s*\{\s*name\s*:\s*['\"]([^'\"]+)['\"]\s*\}", query)
         for label, literal in matches:
-            cquery = f"MATCH (n:`{label}` {{name: $name}}) RETURN count(n) as c"
-            res = neo4j_service.execute_query(cquery, {"name": literal})
+            cquery = (
+                "MATCH (n) "
+                "WHERE any(l IN labels(n) WHERE toLower(trim(l)) = toLower($label)) "
+                "AND n.name = $name "
+                "RETURN count(n) as c"
+            )
+            res = neo4j_service.execute_query(cquery, {"name": literal, "label": label})
             count = res[0]["c"] if res else 0
             if count == 0:
                 return False, f"数据库中不存在 {label}.name='{literal}'，请尝试更换名称或使用模糊查询"
@@ -138,21 +202,102 @@ def llm_generate_cypher(question: str, max_retries: int = 3, max_limit: int = 50
 
     return {'success': False, 'error': f'生成合法 Cypher 失败: {last_err}'}
 
-def llm_answer_stream_with_db(question: str, max_rows: int = 200):
-    """Streamed version of llm_answer_with_db: execute DB, then stream LLM's answer as it is generated."""
+
+def llm_generate_viz_cypher(question: str, base_cypher: str, max_retries: int = 2, max_limit: int = 300) -> dict:
+    """Given the base QA cypher, generate a visualization-friendly cypher returning nodes and relationships.
+
+    The model is asked to keep the same filters/semantics, but return graph patterns (nodes/relationships) and include LIMIT.
+    """
+    api_key = os.environ.get('DEEPSEEK_API_KEY')
+    if not api_key:
+        return {'success': False, 'error': '未配置 DEEPSEEK_API_KEY 环境变量'}
+
+    client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+    schema = load_schema() or FALLBACK_SCHEMA
+
+    base_system = (
+        "你是 Cypher 可视化语句生成助手。根据提供的原始只读查询，生成一条用于图谱可视化的只读 Cypher："
+        "保持相同的过滤条件/含义，但返回节点和关系（例如 RETURN n,r,m 或匹配到的节点及其1跳邻居）。"
+        "只使用 MATCH/OPTIONAL MATCH/WHERE/RETURN/WITH/ORDER BY/LIMIT；包含 LIMIT，且不超过 {max_limit} 行。"
+        "只输出一个 ```cypher ...``` 代码块，不要额外文字。"
+    )
+
+    schema_text = ''
+    try:
+        labels = []
+        for l in schema.get('labels', [])[:10]:
+            props = list(l.get('properties', {}).keys())[:5]
+            labels.append({'label': l.get('label'), 'properties': props})
+        rel_types = [r.get('type') for r in schema.get('relationship_types', [])[:10] if r.get('type')]
+        schema_text = json.dumps({'labels': labels, 'relationship_types': rel_types}, ensure_ascii=False)
+        if len(schema_text) > 1000:
+            schema_text = schema_text[:1000] + '...'
+    except Exception:
+        schema_text = ''
+
+    last_err = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            system = base_system.format(max_limit=max_limit)
+            if schema_text:
+                system += f" schema: {schema_text}"
+            messages = [
+                {"role": "system", "content": system},
+                {"role": "user", "content": f"原始查询:\n{base_cypher}\n问题:{question}"},
+            ]
+            completion = client.chat.completions.create(model="deepseek-chat", messages=messages, stream=False)
+            text = ''
+            if getattr(completion, 'choices', None):
+                choice0 = completion.choices[0]
+                msg = getattr(choice0, 'message', None)
+                text = msg.get('content', '') if msg else ''
+            elif isinstance(completion, dict):
+                choices = completion.get('choices') or []
+                if choices and isinstance(choices[0], dict):
+                    text = choices[0].get('message', {}).get('content', '')
+
+            if not text:
+                last_err = '模型未返回内容'
+                continue
+
+            m = re.search(r"```(?:cypher\s*)?([\s\S]*?)```", text, re.IGNORECASE)
+            if m:
+                cypher = m.group(1).strip()
+            else:
+                m2 = re.search(r"(MATCH[\s\S]*)", text, re.IGNORECASE)
+                cypher = m2.group(1).strip() if m2 else text.strip()
+
+            valid, msg, normalized = neo4j_service.validate_readonly_query(cypher, max_limit=max_limit, schema=schema)
+            if not valid:
+                last_err = msg
+                continue
+            return {'success': True, 'cypher': cypher, 'normalized': normalized}
+        except Exception as e:
+            last_err = str(e)
+            continue
+    return {'success': False, 'error': last_err or '生成可视化语句失败'}
+
+def llm_answer_stream_with_db(question: str, max_rows: int = 200, precomputed: dict = None, pre_exec_res: dict = None):
+    """Streamed version: execute DB (or reuse given result), then stream LLM answer.
+
+    precomputed: optional generation result {'success','cypher','normalized'}
+    pre_exec_res: optional execute_readonly_query result to avoid re-query
+    """
     api_key = os.environ.get('DEEPSEEK_API_KEY')
     if not api_key:
         yield '[ERROR] 未配置 DEEPSEEK_API_KEY 环境变量'
         return
 
-    # Generate cypher
-    gen = llm_generate_cypher(question, max_retries=3, max_limit=max_rows)
-    if not gen.get('success'):
-        yield f"[ERROR] 生成Cypher失败: {gen.get('error')}"
-        return
-
-    cypher = gen.get('cypher', '')
-    normalized = gen.get('normalized') or cypher
+    if precomputed and precomputed.get('success'):
+        cypher = precomputed.get('cypher', '')
+        normalized = precomputed.get('normalized') or cypher
+    else:
+        gen = llm_generate_cypher(question, max_retries=3, max_limit=max_rows)
+        if not gen.get('success'):
+            yield f"[ERROR] 生成Cypher失败: {gen.get('error')}"
+            return
+        cypher = gen.get('cypher', '')
+        normalized = gen.get('normalized') or cypher
     # final safety check on normalized query (with schema)
     schema = load_schema() or FALLBACK_SCHEMA
 
@@ -222,7 +367,7 @@ def llm_answer_stream_with_db(question: str, max_rows: int = 200):
         pass
 
     # Execute the validated query
-    exec_res = neo4j_service.execute_readonly_query(normalized, params=None, max_rows=max_rows)
+    exec_res = pre_exec_res if pre_exec_res is not None else neo4j_service.execute_readonly_query(normalized, params=None, max_rows=max_rows)
     if not exec_res.get('success'):
         # fallback to LLM direct answer stream with error note
         try:

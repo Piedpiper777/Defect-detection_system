@@ -50,6 +50,27 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
+            // 若后端返回了生成的 Cypher（Base64），在右侧同步执行
+            const cypherB64 = res.headers.get('X-Cypher-B64');
+            if (cypherB64) {
+                try {
+                    const bytes = Uint8Array.from(atob(cypherB64), c => c.charCodeAt(0));
+                    const decoded = new TextDecoder('utf-8').decode(bytes);
+                    const queryInput = document.getElementById('cypherQuery');
+                    if (queryInput) queryInput.value = decoded;
+                    if (decoded) {
+                        if (viz) viz.clearNetwork();
+                        config.initialCypher = decoded;
+                        viz = new NeoVis.default(config);
+                        viz.render();
+                        showStatus('已用生成语句更新图谱', 'success');
+                    }
+                } catch (err) {
+                    console.error('解码或渲染生成语句失败', err);
+                    showStatus('图谱更新失败: ' + err.message, 'error');
+                }
+            }
+
             const reader = res.body.getReader();
             const decoder = new TextDecoder('utf-8');
             const botContent = addStreamingMessage('bot');

@@ -4,17 +4,15 @@ import logging
 import time
 import os
 
-# 加载环境变量（支持 .env）
 load_dotenv()
 
 class Neo4jService:
+    """Neo4j服务类，封装连接与基本操作"""
     def __init__(self, uri=None, user=None, password=None,
                  max_retries=10, retry_interval=3):
-        # 严格模式：仅从入参或环境变量读取，不再内置任何明文默认值
         self.uri = uri or os.getenv("NEO4J_URI")
         self.user = user or os.getenv("NEO4J_USER")
         self.password = password or os.getenv("NEO4J_PASSWORD")
-
         if not self.uri or not self.user or not self.password:
             raise ValueError("Neo4j 配置缺失：请在环境变量或初始化参数中提供 NEO4J_URI / NEO4J_USER / NEO4J_PASSWORD。")
         self.driver = None
@@ -24,11 +22,9 @@ class Neo4jService:
         self.connect()
 
     def connect(self):
-        """连接到Neo4j数据库，包含重试机制"""
         for attempt in range(1, self.max_retries + 1):
             try:
                 self.driver = GraphDatabase.driver(self.uri, auth=(self.user, self.password))
-                # 测试连接
                 with self.driver.session() as session:
                     session.run("RETURN 1")
                 self.connected = True
@@ -36,23 +32,19 @@ class Neo4jService:
                 return
             except Exception as e:
                 self.connected = False
-                logging.warning(
-                    f"Neo4j连接失败，第{attempt}/{self.max_retries}次重试: {str(e)}"
-                )
+                logging.warning(f"Neo4j连接失败，第{attempt}/{self.max_retries}次重试: {str(e)}")
                 if attempt == self.max_retries:
                     logging.error("Neo4j在最大重试次数后仍不可用，终止启动")
                     raise e
                 time.sleep(self.retry_interval)
 
     def close(self):
-        """关闭数据库连接"""
         if self.driver:
             self.driver.close()
             logging.info("Neo4j连接已关闭")
         self.connected = False
 
     def execute_query(self, query, parameters=None):
-        """执行Cypher查询"""
         try:
             with self.driver.session() as session:
                 result = session.run(query, parameters or {})
@@ -61,24 +53,18 @@ class Neo4jService:
             logging.error(f"查询执行失败: {str(e)}")
             raise e
 
-    def get_graph_data(self, query="MATCH (n)-[r]->(m) RETURN n,r,m LIMIT 50"):
-        """获取图数据，用于前端可视化"""
+    def get_graph_data(self, query="MATCH (n)-[r]->(m) RETURN n,r,m LIMIT 100"):
+        """ 获取初始图数据 """
         try:
             records = self.execute_query(query)
-
-            nodes = []
-            edges = []
-            node_ids = set()
-            edge_ids = set()
-
+            nodes, edges = [], []
+            node_ids, edge_ids = set(), set()
             for record in records:
-                # 处理节点
                 for node_key in ['n', 'm']:
                     if node_key in record.keys():
                         node = record[node_key]
                         if node.id not in node_ids:
                             prop_dict = dict(node)
-                            # 用属性名 'name' 作为显示文字（caption），如果没有则使用标签名
                             caption = prop_dict.get('name') or (list(node.labels)[0] if node.labels else 'Node')
                             nodes.append({
                                 'id': node.id,
@@ -87,8 +73,6 @@ class Neo4jService:
                                 'properties': prop_dict
                             })
                             node_ids.add(node.id)
-
-                # 处理关系
                 if 'r' in record.keys():
                     relationship = record['r']
                     if relationship.id not in edge_ids:
@@ -100,17 +84,9 @@ class Neo4jService:
                             'properties': dict(relationship)
                         })
                         edge_ids.add(relationship.id)
-
-            return {
-                'nodes': nodes,
-                'edges': edges,
-                'success': True
-            }
+            return {'nodes': nodes, 'edges': edges, 'success': True}
         except Exception as e:
-            return {
-                'error': str(e),
-                'success': False
-            }
+            return {'error': str(e), 'success': False}
 
     def get_node_count(self):
         """获取节点总数"""
@@ -131,6 +107,6 @@ class Neo4jService:
         """获取所有关系类型"""
         result = self.execute_query("CALL db.relationshipTypes() YIELD relationshipType RETURN relationshipType")
         return [record['relationshipType'] for record in result]
-
-# 创建全局服务实例
+# 创建全局 Neo4jService 实例
 neo4j_service = Neo4jService()
+

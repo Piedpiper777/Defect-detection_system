@@ -3,8 +3,9 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 import logging
 import os
-from routes.api import api_bp
-from services.neo4j_service import neo4j_service
+from routes.llmkg.llm_api import llm_bp
+from routes.llmkg.kg_api import kg_bp
+from services.llmkg.kg_service import neo4j_service
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -27,9 +28,10 @@ def create_app():
     CORS(app)
 
     # 注册蓝图
-    app.register_blueprint(api_bp, url_prefix='/api')
+    app.register_blueprint(llm_bp, url_prefix='/api/llm')
+    app.register_blueprint(kg_bp, url_prefix='/api/kg')
 
-    # 路由
+    # neo4j前端配置
     def _neo4j_frontend_config():
         return {
             "serverUrl": os.getenv("NEO4J_URI", "bolt://localhost:7687"),
@@ -45,7 +47,7 @@ def create_app():
     @app.route('/llmkg')
     def llmkg():
         """问答+图谱页面"""
-        return render_template('llmkg.html', neo4j_config=_neo4j_frontend_config())
+        return render_template('llmkg/llmkg.html', neo4j_config=_neo4j_frontend_config())
 
     # 错误处理
     @app.errorhandler(404)

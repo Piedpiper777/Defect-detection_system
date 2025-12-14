@@ -1,18 +1,32 @@
 from flask import request, jsonify
 from services.llmkg.kg_service import neo4j_service
+from services.llmkg.audit import audit_cypher
+from services.llmkg.schema_store import load_schema, generate_schema_from_import
 from .blueprint import kg_bp
 
 @kg_bp.route('/graph', methods=['GET', 'POST'])
 def graph_data():
     """获取图数据"""
+    default_q = 'MATCH (n)-[r]->(m) RETURN n,r,m LIMIT 100'
     if request.method == 'POST':
-        data = request.get_json()
-        query = data.get('query', 'MATCH (n)-[r]->(m) RETURN n,r,m LIMIT 100')
+        data = request.get_json() or {}
+        query = data.get('query', default_q)
     else:
-        query = request.args.get('query', 'MATCH (n)-[r]->(m) RETURN n,r,m LIMIT 100')
+        query = request.args.get('query', default_q)
 
     try:
-        result = neo4j_service.get_graph_data(query)
+        valid, msg, normalized = neo4j_service.validate_readonly_query(query, max_limit=500)
+        if not valid:
+            return jsonify({'success': False, 'error': msg}), 403
+
+        audit_cypher({
+            'endpoint': '/kg/graph',
+            'remote_addr': request.remote_addr,
+            'query': query,
+            'normalized': normalized
+        })
+
+        result = neo4j_service.get_graph_data(normalized)
         if result['success']:
             return jsonify(result)
         else:
@@ -41,6 +55,44 @@ def database_stats():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+
+@kg_bp.route('/schema', methods=['GET'])
+def get_schema():
+    """返回图数据库 schema（带缓存标记）。"""
+    try:
+        schema = load_schema() or {}
+        return jsonify({'success': True, 'schema': schema, 'cached': False})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@kg_bp.route('/schema/refresh', methods=['POST'])
+def refresh_schema():
+    """强制刷新 schema 缓存（从文件加载）。"""
+    try:
+        schema = load_schema() or {}
+        # refresh in-memory cache
+        neo4j_service._schema_cache = schema
+        neo4j_service._schema_cache_ts = 0
+        return jsonify({'success': True, 'schema': schema, 'cached': False})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@kg_bp.route('/schema/rebuild', methods=['POST'])
+def rebuild_schema_from_import():
+    """读取 import 目录 CSV 生成 schema 文件并返回。"""
+    try:
+        payload = request.get_json(silent=True) or {}
+        import_dir = payload.get('import_dir') if isinstance(payload, dict) else None
+        schema = generate_schema_from_import(import_dir=import_dir)
+        # refresh cache
+        neo4j_service._schema_cache = schema
+        neo4j_service._schema_cache_ts = 0
+        return jsonify({'success': True, 'schema': schema, 'cached': False})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @kg_bp.route('/query', methods=['POST'])
 def execute_query():
     """执行自定义Cypher查询（只读）"""
@@ -50,34 +102,19 @@ def execute_query():
         if not query:
             return jsonify({'success': False, 'error': '查询语句不能为空'}), 400
 
-        query_upper = query.upper().strip()
-        if query_upper.startswith(('CREATE', 'MERGE', 'SET', 'DELETE', 'REMOVE', 'DROP')):
-            return jsonify({'success': False, 'error': '只允许执行只读查询'}), 403
+        valid, msg, normalized = neo4j_service.validate_readonly_query(query, max_limit=500)
+        if not valid:
+            return jsonify({'success': False, 'error': msg}), 403
 
-        records = neo4j_service.execute_query(query)
-        results = []
-        for record in records:
-            result_dict = {}
-            for key, value in record.items():
-                if hasattr(value, 'labels'):
-                    result_dict[key] = {
-                        'type': 'node',
-                        'id': value.id,
-                        'labels': list(value.labels),
-                        'properties': dict(value)
-                    }
-                elif hasattr(value, 'type'):
-                    result_dict[key] = {
-                        'type': 'relationship',
-                        'id': value.id,
-                        'type': value.type,
-                        'start_node': value.start_node.id,
-                        'end_node': value.end_node.id,
-                        'properties': dict(value)
-                    }
-                else:
-                    result_dict[key] = value
-            results.append(result_dict)
-        return jsonify({'success': True, 'results': results, 'count': len(results)})
+        audit_cypher({
+            'endpoint': '/kg/query',
+            'remote_addr': request.remote_addr,
+            'query': query,
+            'normalized': normalized
+        })
+
+        exec_res = neo4j_service.execute_readonly_query(normalized, params=None, max_rows=500)
+        status = 200 if exec_res.get('success') else 400
+        return jsonify(exec_res), status
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500

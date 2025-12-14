@@ -24,7 +24,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    function sendQuestion() {
+    async function sendQuestion() {
         const question = questionInput.value.trim();
         if (!question) return;
 
@@ -35,26 +35,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
         loadingIndicator.style.display = 'flex';
 
-        // 使用流式API
-        fetch('/api/llm/llm_stream', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ question })
-        }).then(async (res) => {
+        try {
+            const res = await fetch('/api/llm/llm_answer', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question })
+            });
+
             if (!res.ok) {
-                // 后端返回错误（非200），尝试读取json并提示
-                const err = await res.json().catch(() => ({ error: '服务返回错误' }));
+                const err = await res.json().catch(() => ({ error: '服务错误' }));
                 loadingIndicator.style.display = 'none';
                 sendButton.disabled = false;
                 addMessage(err.error || '服务错误', 'bot');
-                chatHistory.scrollTop = chatHistory.scrollHeight;
                 return;
             }
 
             const reader = res.body.getReader();
             const decoder = new TextDecoder('utf-8');
-
-            // 创建一个空的 bot 消息，并返回内容容器以便后续追加
             const botContent = addStreamingMessage('bot');
 
             let done = false;
@@ -62,7 +59,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 const { value, done: streamDone } = await reader.read();
                 if (value) {
                     const chunk = decoder.decode(value, { stream: true });
-                    // 追加文本
                     botContent.innerHTML += chunk.replace(/\n/g, '<br>');
                     chatHistory.scrollTop = chatHistory.scrollHeight;
                 }
@@ -71,13 +67,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
             loadingIndicator.style.display = 'none';
             sendButton.disabled = false;
-        }).catch(err => {
+        } catch (err) {
             console.error(err);
             loadingIndicator.style.display = 'none';
             sendButton.disabled = false;
             addMessage('调用大模型失败，请检查网络或服务状态。', 'bot');
             chatHistory.scrollTop = chatHistory.scrollHeight;
-        });
+        }
     }
 
     function addMessage(content, type) {
@@ -226,11 +222,28 @@ document.addEventListener('DOMContentLoaded', function() {
     const runQueryBtn = document.getElementById('runQuery');
     const resetViewBtn = document.getElementById('resetView');
     const fitViewBtn = document.getElementById('fitView');
+    const refreshSchemaBtn = document.getElementById('refreshSchema');
     const cypherInput = document.getElementById('cypherQuery');
 
     if (runQueryBtn) runQueryBtn.addEventListener('click', runCustomQuery);
     if (resetViewBtn) resetViewBtn.addEventListener('click', resetView);
     if (fitViewBtn) fitViewBtn.addEventListener('click', fitView);
+    if (refreshSchemaBtn) {
+        refreshSchemaBtn.addEventListener('click', async () => {
+            try {
+                const res = await fetch('/api/kg/schema/rebuild', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+                const data = await res.json();
+                if (data.success) {
+                    showStatus('Schema 已从 CSV 更新', 'success');
+                } else {
+                    showStatus('Schema 更新失败: ' + (data.error || '未知错误'), 'error');
+                }
+            } catch (e) {
+                console.error(e);
+                showStatus('Schema 更新异常', 'error');
+            }
+        });
+    }
     if (cypherInput) {
         cypherInput.addEventListener('keypress', function(e) {
             if (e.key === 'Enter') runCustomQuery();

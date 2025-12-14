@@ -1,0 +1,43 @@
+{
+  "labels": [
+    {
+      "label": "DetectObject",
+      "properties": {
+        "name": {}
+      }
+    },
+    {
+      "label": "Solution",
+      "properties": {
+        "name": {}
+      }
+    },
+    {
+      "label": "DefectType",
+      "properties": {
+        "name": {}
+      }
+    },
+    {
+      "label": "Cause",
+      "properties": {
+        "name": {}
+      }
+    }
+  ],
+  "relationship_types": [
+    {
+      "type": "解决",
+      "properties": {}
+    },
+    {
+      "type": "有缺陷",
+      "properties": {}
+    },
+    {
+      "type": "导致",
+      "properties": {}
+    }
+  ],
+  "generated_from": "/data/zhanggu/Project/Defect_detection_system/neo4j-community-5.26.18/import"
+}

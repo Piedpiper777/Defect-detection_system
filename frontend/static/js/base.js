@@ -39,12 +39,53 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // desktop toggle via header icon
     const desktopToggle = document.querySelector('.logo-icon');
+    const footerToggle = document.getElementById('sidebarToggle');
+    const toggleIcon = document.getElementById('toggleIcon');
+
+    function setToggleIcon(isCollapsed) {
+        if (!toggleIcon) return;
+        toggleIcon.classList.toggle('fa-chevron-left', !isCollapsed);
+        toggleIcon.classList.toggle('fa-chevron-right', isCollapsed);
+    }
+
+    // initialize toggle icon based on saved state
+    setToggleIcon(localStorage.getItem('sidebar-collapsed') === 'true');
+
     if (desktopToggle) {
         desktopToggle.addEventListener('click', () => {
             const collapsed = sidebar.classList.toggle('collapsed');
             mainContent.classList.toggle('expanded');
             localStorage.setItem('sidebar-collapsed', collapsed);
+            setToggleIcon(collapsed);
         });
+    }
+
+    // footer toggle button (desktop expected behavior)
+    if (footerToggle) {
+        footerToggle.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.debug('sidebarToggle clicked', { mobile: isMobile() });
+            // on mobile, use show/hide instead
+            if (isMobile()) {
+                sidebar.classList.add('show');
+                overlay.classList.add('show');
+                return;
+            }
+            const collapsed = sidebar.classList.toggle('collapsed');
+            mainContent.classList.toggle('expanded');
+            localStorage.setItem('sidebar-collapsed', collapsed);
+            setToggleIcon(collapsed);
+        });
+        // also make icon respond to clicks
+        const toggleIconInner = footerToggle.querySelector('i');
+        if (toggleIconInner) {
+            toggleIconInner.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                footerToggle.click();
+            });
+        }
     }
 
     // mobile toggle button

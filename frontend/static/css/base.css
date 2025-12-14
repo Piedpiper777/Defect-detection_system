@@ -1,7 +1,7 @@
 :root {
     /* 侧边栏变量 - 现代清爽风格 */
-    --sidebar-width: 260px;
-    --sidebar-collapsed-width: 72px;
+    --sidebar-width: 300px;
+    --sidebar-collapsed-width: 82px;
     --sidebar-bg-start: #FFFFFF;
     --sidebar-bg-end: #FFFFFF;
     --sidebar-text: #A3AED0;
@@ -105,6 +105,38 @@ body {
     overflow-y: auto;
     overflow-x: hidden;
 }
+
+/* 侧边栏页脚与折叠按钮 */
+.sidebar-footer {
+    padding: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-top: 1px solid var(--sidebar-border-right);
+}
+
+.toggle-btn {
+    width: 52px;
+    height: 52px;
+    border-radius: 12px;
+    background: linear-gradient(180deg, rgba(37,99,235,0.10), rgba(37,99,235,0.06));
+    border: 1px solid rgba(37,99,235,0.12);
+    color: var(--sidebar-text-active);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    z-index: 1001;
+    pointer-events: auto;
+}
+
+.toggle-btn i { font-size: 16px; transition: transform 0.18s ease; }
+
+.toggle-btn:hover { transform: translateY(-3px); box-shadow: 0 10px 30px rgba(37,99,235,0.12); }
+.toggle-btn:active { transform: translateY(-1px); }
+
+.sidebar.collapsed .toggle-btn i { transform: rotate(180deg); }
 
 .sidebar-nav::-webkit-scrollbar {
     width: 4px;

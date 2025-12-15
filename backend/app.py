@@ -14,6 +14,12 @@ logger = logging.getLogger(__name__)
 # 加载 .env 配置
 load_dotenv()
 
+# 设置默认的SENT_MODEL_PATH环境变量
+if not os.getenv('SENT_MODEL_PATH'):
+    default_model_path = os.path.join(os.path.dirname(__file__), '..', 'models', 'Jerry0', 'text2vec-base-chinese')
+    os.environ['SENT_MODEL_PATH'] = default_model_path
+    logger.info(f"设置默认SENT_MODEL_PATH: {default_model_path}")
+
 def create_app():
     """创建Flask应用"""
     app = Flask(__name__,

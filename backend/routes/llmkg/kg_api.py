@@ -3,6 +3,8 @@ from services.llmkg.kg_service import neo4j_service
 from services.llmkg.audit import audit_cypher
 from services.llmkg.schema_store import load_schema, generate_schema_from_import
 from .blueprint import kg_bp
+import os
+import json
 
 @kg_bp.route('/graph', methods=['GET', 'POST'])
 def graph_data():
@@ -73,6 +75,59 @@ def text_db():
         offset = int(request.args.get('offset', 0))
         slice_ = filtered[offset: offset + limit]
         return jsonify({'success': True, 'count': len(filtered), 'items': slice_})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@kg_bp.route('/textdb/vector_search', methods=['GET'])
+def textdb_vector_search():
+    """Vector search over text DB."""
+    try:
+        q = (request.args.get('q') or '').strip()
+        if not q:
+            return jsonify({'success': False, 'error': 'q is required'}), 400
+        k = int(request.args.get('k', 5))
+        from services.llmkg import vector_store
+        res = vector_store.search(q, k=k)
+        return jsonify(res)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@kg_bp.route('/textdb/build_index', methods=['POST'])
+def textdb_build_index():
+    """Build vector index from local text DB (admin operation)."""
+    try:
+        data = request.get_json(silent=True) or {}
+        model_path = data.get('model_path') or os.getenv('SENT_MODEL_PATH')
+        import os as _os
+        from services.llmkg import vector_store
+        base = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.dirname(__file__))), 'data', 'text_data')
+        path = _os.path.join(base, 'total.jsonl')
+        if not _os.path.exists(path):
+            return jsonify({'success': False, 'error': 'text DB file not found'}), 404
+        # load texts
+        with open(path, 'r', encoding='utf-8') as f:
+            txt = f.read()
+        try:
+            texts = json.loads(txt)
+        except Exception:
+            texts = []
+            for line in txt.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    texts.append(json.loads(line))
+                except Exception:
+                    continue
+
+        if not texts:
+            return jsonify({'success': False, 'error': 'no texts to index'}), 400
+        if not model_path:
+            return jsonify({'success': False, 'error': 'model_path required'}), 400
+        vector_store.build_index_from_texts(texts, model_path=model_path)
+        return jsonify({'success': True, 'count': len(texts)})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 

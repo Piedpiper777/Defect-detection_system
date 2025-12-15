@@ -7,6 +7,7 @@ from services.llmkg.llm_service import (
     llm_generate_viz_cypher,
     build_viz_cypher_from_base,
 )
+from services.llmkg.rag_service import rag_service
 from services.llmkg.kg_service import neo4j_service
 from flask import Response, stream_with_context
 
@@ -60,6 +61,22 @@ def llm_answer_endpoint():
         except Exception:
             pass
     return resp
+
+
+@llm_bp.route('/rag_retrieve', methods=['POST'])
+def rag_retrieve_endpoint():
+    """RAG检索接口：同时从知识图谱和向量数据库检索相关信息"""
+    data = request.get_json() or {}
+    question = (data.get('question') or '').strip()
+
+    if not question:
+        return jsonify({'success': False, 'error': '问题不能为空'}), 400
+
+    try:
+        result = rag_service.retrieve_for_llm(question, max_results=10)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 

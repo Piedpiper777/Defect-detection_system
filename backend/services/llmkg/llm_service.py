@@ -115,7 +115,9 @@ def llm_generate_cypher(question: str, max_retries: int = 3, max_limit: int = 50
     base_system = (
         "你是 Cypher 生成助手。请用中文理解问题，并生成**单条只读**的 Cypher："
         "只允许 MATCH / OPTIONAL MATCH / WHERE / WITH / RETURN / ORDER BY / LIMIT；必须包含 LIMIT 且不超过 {max_limit} 行。"
-        "使用现有的节点标签和关系类型，避免编造新的标签或把关系名当作标签。"
+        "使用现有的节点标签和关系类型：节点标签包括 DetectObject, DefectType, Cause, Solution；关系类型包括 有缺陷, 导致, 解决。"
+        "注意关系方向：(DetectObject)-[:有缺陷]->(DefectType)，(Cause)-[:导致]->(DefectType)，(Solution)-[:解决]->(DefectType)。"
+        "避免编造新的标签或关系，把关系名当作标签。"
         "只输出一个 markdown 代码块 ```cypher ...```，不要有额外文字；若无法安全生成，输出 NO_QUERY。"
     )
 
@@ -422,9 +424,40 @@ def llm_answer_stream_with_db(question: str, max_rows: int = 200, precomputed: d
         rows_text += str(r) + '\n'
 
     try:
+        # 使用增强的RAG服务检索相关信息
+        retrieved = []
+        rag_context = ""
+        try:
+            from .rag_service import rag_service
+            rag_result = rag_service.retrieve_for_llm(question, max_results=8)
+            if rag_result.get('success'):
+                rag_context = rag_result.get('formatted_text', '')
+                # 同时保留结构化数据用于可能的后续处理
+                for result in rag_result.get('results', []):
+                    retrieved.append({
+                        'id': result.get('id', f"item_{len(retrieved)}"),
+                        'text': result.get('content', ''),
+                        'score': result.get('final_score', 0),
+                        'source': result.get('source', 'unknown'),
+                        'type': result.get('type', 'unknown')
+                    })
+        except Exception as e:
+            logging.warning(f"RAG retrieval failed: {e}")
+            retrieved = []
+            rag_context = ""
+
         client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
-        system = "You are an assistant that answers user questions using query results. Use the provided sample rows to craft a concise, accurate, and human-friendly answer. If results are insufficient, say so."
-        user_prompt = f"User question:\n{question}\n\nCypher executed:\n{normalized}\n\nSample results (first {len(sample)} rows):\n{rows_text}"
+        system = "You are an assistant that answers user questions using query results and retrieved documents. Use the provided sample rows and documents to craft a concise, accurate, and human-friendly answer. If results are insufficient, say so and avoid hallucination. Clearly cite retrieved document ids when using them."
+        docs_text = ''
+        if rag_context:
+            docs_text = f'\n\n检索到的相关信息:\n{rag_context}'
+        elif retrieved:
+            # 降级到旧格式（如果新RAG失败）
+            docs_text = '\n\nRetrieved documents:\n'
+            for d in retrieved:
+                docs_text += f"[id:{d.get('id')}] {d.get('text','')[:1000]}\n"
+
+        user_prompt = f"User question:\n{question}\n\nCypher executed:\n{normalized}\n\nSample results (first {len(sample)} rows):\n{rows_text}{docs_text}"
         messages = [
             {"role": "system", "content": system},
             {"role": "user", "content": user_prompt},

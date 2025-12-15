@@ -34,6 +34,48 @@ def graph_data():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
+
+@kg_bp.route('/textdb', methods=['GET'])
+def text_db():
+    """Return a slice of the local text database for inspection."""
+    try:
+        import os, json
+        base = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'text_data')
+        path = os.path.join(base, 'total.jsonl')
+        if not os.path.exists(path):
+            return jsonify({'success': False, 'error': 'text DB file not found'}), 404
+
+        # try parse as JSON array first, fall back to JSONL
+        with open(path, 'r', encoding='utf-8') as f:
+            text = f.read()
+        try:
+            data = json.loads(text)
+        except Exception:
+            data = []
+            for line in text.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    data.append(json.loads(line))
+                except Exception:
+                    continue
+
+        # filtering support
+        q = (request.args.get('q') or '').strip()
+        if q:
+            ql = q.lower()
+            filtered = [it for it in data if ql in (it.get('text') or '').lower() or ql in str(it.get('id','')).lower()]
+        else:
+            filtered = data
+
+        limit = int(request.args.get('limit', 50))
+        offset = int(request.args.get('offset', 0))
+        slice_ = filtered[offset: offset + limit]
+        return jsonify({'success': True, 'count': len(filtered), 'items': slice_})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @kg_bp.route('/stats', methods=['GET'])
 def database_stats():
     """获取数据库统计信息"""

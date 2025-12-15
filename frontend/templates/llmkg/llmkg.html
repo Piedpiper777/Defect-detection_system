@@ -50,22 +50,35 @@
             </div>
         </div>
 
-        <!-- 右侧：图谱 -->
-        <div class="card-panel graph-panel">
-            <div class="panel-header">
-                <h3><i class="fas fa-project-diagram" style="margin-right:8px;color:#2F80ED;"></i>图谱可视化</h3>
+        <!-- 右侧：图谱 + 文本（并列卡片） -->
+        <div class="right-column">
+            <div class="card-panel graph-panel">
+                <div class="panel-header">
+                    <h3><i class="fas fa-project-diagram" style="margin-right:8px;color:#2F80ED;"></i>知识图谱</h3>
+                </div>
+
+                <div class="viz-controls">
+                    <input type="text" id="cypherQuery" class="query-input" value="MATCH (n)-[r]->(m) RETURN n,r,m LIMIT 100" placeholder="输入Cypher查询语句...">
+                    <button id="runQuery" class="btn-viz">执行查询</button>
+                    <button id="resetView" class="btn-viz secondary">重置视图</button>
+                    <button id="fitView" class="btn-viz secondary">适应屏幕</button>
+                    <button id="refreshSchema" class="btn-viz secondary">更新Schema</button>
+                </div>
+
+                <div id="statusMessage" class="status-message"></div>
+                <div id="viz"></div>
             </div>
 
-            <div class="viz-controls">
-                <input type="text" id="cypherQuery" class="query-input" value="MATCH (n)-[r]->(m) RETURN n,r,m LIMIT 100" placeholder="输入Cypher查询语句...">
-                <button id="runQuery" class="btn-viz">执行查询</button>
-                <button id="resetView" class="btn-viz secondary">重置视图</button>
-                <button id="fitView" class="btn-viz secondary">适应屏幕</button>
-                <button id="refreshSchema" class="btn-viz secondary">更新Schema</button>
+            <div class="card-panel text-db-panel">
+                <div class="panel-header">
+                    <h3><i class="fas fa-book" style="margin-right:8px;color:#2F80ED;"></i>文本数据库</h3>
+                    <div class="panel-actions">                        <input type="text" id="textDbFilter" class="query-input" placeholder="按关键词筛选文本..." aria-label="筛选文本">                        <button id="refreshTextDb" class="btn-viz secondary">刷新文本</button>
+                    </div>
+                </div>
+                <div class="text-db-content" id="textDb" aria-live="polite">
+                    <p class="muted">正在加载…</p>
+                </div>
             </div>
-
-            <div id="statusMessage" class="status-message"></div>
-            <div id="viz"></div>
         </div>
     </div>
 </div>

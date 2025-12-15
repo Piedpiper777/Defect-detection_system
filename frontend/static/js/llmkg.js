@@ -271,5 +271,98 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    setTimeout(initViz, 800);
+    // load viz and text DB after a short delay
+    setTimeout(() => {
+        initViz();
+        loadTextDb();
+    }, 800);
+
+    // Text DB: fetch and render
+    async function loadTextDb(limit = 50, offset = 0, q = '') {
+        const cont = document.getElementById('textDb');
+        if (!cont) return;
+        cont.innerHTML = '<p class="muted">正在加载…</p>';
+        try {
+            const url = `/api/kg/textdb?limit=${limit}&offset=${offset}` + (q ? `&q=${encodeURIComponent(q)}` : '');
+            const res = await fetch(url);
+            if (!res.ok) {
+                cont.innerHTML = `<p class="muted">加载失败: ${res.status}</p>`;
+                return;
+            }
+            const data = await res.json();
+            if (!data.success) {
+                cont.innerHTML = `<p class="muted">加载失败: ${data.error || '未知错误'}</p>`;
+                return;
+            }
+            renderTextDb(data.items || []);
+            const header = document.querySelector('.text-db-panel .panel-header h3');
+            if (header) {
+                const countSpan = header.querySelector('.count');
+                if (countSpan) countSpan.remove();
+                const span = document.createElement('span');
+                span.className = 'count';
+                span.style.fontWeight = '400';
+                span.style.fontSize = '13px';
+                span.style.color = 'var(--muted)';
+                span.style.marginLeft = '8px';
+                span.textContent = `(${data.items ? data.items.length : 0}/${data.count || 0})`;
+                header.appendChild(span);
+            }
+        } catch (e) {
+            console.error(e);
+            cont.innerHTML = `<p class="muted">加载异常</p>`;
+        }
+    }
+
+    // debounce helper
+    function debounce(fn, wait) {
+        let t;
+        return function(...args) {
+            clearTimeout(t);
+            t = setTimeout(() => fn.apply(this, args), wait);
+        }
+    }
+
+    const refreshTextDbBtn = document.getElementById('refreshTextDb');
+    if (refreshTextDbBtn) {
+        refreshTextDbBtn.addEventListener('click', () => loadTextDb());
+    }
+
+    const textDbFilter = document.getElementById('textDbFilter');
+    if (textDbFilter) {
+        const debounced = debounce(() => loadTextDb(50,0,textDbFilter.value.trim()), 300);
+        textDbFilter.addEventListener('input', debounced);
+        // allow Enter to force immediate search
+        textDbFilter.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') loadTextDb(50,0,textDbFilter.value.trim());
+        });
+    }
+
+    function renderTextDb(items) {
+        const cont = document.getElementById('textDb');
+        if (!cont) return;
+        if (!items || !items.length) {
+            cont.innerHTML = '<p class="muted">没有数据</p>';
+            return;
+        }
+        cont.innerHTML = '';
+        items.forEach(it => {
+            const el = document.createElement('div');
+            el.className = 'text-db-item';
+            const idSpan = document.createElement('span');
+            idSpan.className = 'id';
+            idSpan.textContent = `#${it.id}`;
+            const txtSpan = document.createElement('span');
+            txtSpan.className = 'txt';
+            txtSpan.textContent = it.text || '';
+            el.appendChild(idSpan);
+            el.appendChild(txtSpan);
+            el.addEventListener('click', () => {
+                // show full text in status area for quick inspection
+                showStatus(it.text || '(无内容)', 'success');
+            });
+            cont.appendChild(el);
+        });
+    }
+
 });

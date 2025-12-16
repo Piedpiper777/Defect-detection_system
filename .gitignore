@@ -7,3 +7,4 @@ neo4j-community-5.26.18/*
 .env
 backend/logs/
 models/
+backend/data/sessions

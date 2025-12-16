@@ -279,11 +279,12 @@ def llm_generate_viz_cypher(question: str, base_cypher: str, max_retries: int = 
             continue
     return {'success': False, 'error': last_err or '生成可视化语句失败'}
 
-def llm_answer_stream_with_db(question: str, max_rows: int = 200, precomputed: dict = None, pre_exec_res: dict = None):
+def llm_answer_stream_with_db(question: str, max_rows: int = 200, precomputed: dict = None, pre_exec_res: dict = None, messages: list = None):
     """Streamed version: execute DB (or reuse given result), then stream LLM answer.
 
     precomputed: optional generation result {'success','cypher','normalized'}
     pre_exec_res: optional execute_readonly_query result to avoid re-query
+    messages: optional conversation history in OpenAI format [{"role": "user", "content": "..."}, ...]
     """
     api_key = os.environ.get('DEEPSEEK_API_KEY')
     if not api_key:
@@ -309,11 +310,22 @@ def llm_answer_stream_with_db(question: str, max_rows: int = 200, precomputed: d
         try:
             client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
             system = "You are a helpful assistant specialized in industrial defect detection QA. Note: Cypher generation was rejected: %s" % msg
-            messages = [
-                {"role": "system", "content": system},
-                {"role": "user", "content": question},
-            ]
-            stream_iter = client.chat.completions.create(model="deepseek-chat", messages=messages, stream=True)
+            # 构建messages：如果有历史，保留历史；否则创建新的
+            if messages and len(messages) > 0:
+                # 确保system message在最前面
+                llm_messages = [{"role": "system", "content": system}]
+                # 添加历史消息（跳过已有的system消息）
+                for msg_item in messages:
+                    if msg_item.get("role") != "system":
+                        llm_messages.append(msg_item)
+                # 添加当前问题
+                llm_messages.append({"role": "user", "content": question})
+            else:
+                llm_messages = [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": question},
+                ]
+            stream_iter = client.chat.completions.create(model="deepseek-chat", messages=llm_messages, stream=True)
             for event in stream_iter:
                 text = ''
                 try:
@@ -375,11 +387,22 @@ def llm_answer_stream_with_db(question: str, max_rows: int = 200, precomputed: d
         try:
             client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
             system = "You are a helpful assistant specialized in industrial defect detection QA. Database query execution failed: %s" % exec_res.get('error')
-            messages = [
-                {"role": "system", "content": system},
-                {"role": "user", "content": question},
-            ]
-            stream_iter = client.chat.completions.create(model="deepseek-chat", messages=messages, stream=True)
+            # 构建messages：如果有历史，保留历史；否则创建新的
+            if messages and len(messages) > 0:
+                # 确保system message在最前面
+                llm_messages = [{"role": "system", "content": system}]
+                # 添加历史消息（跳过已有的system消息）
+                for msg_item in messages:
+                    if msg_item.get("role") != "system":
+                        llm_messages.append(msg_item)
+                # 添加当前问题
+                llm_messages.append({"role": "user", "content": question})
+            else:
+                llm_messages = [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": question},
+                ]
+            stream_iter = client.chat.completions.create(model="deepseek-chat", messages=llm_messages, stream=True)
             for event in stream_iter:
                 text = ''
                 try:
@@ -465,12 +488,24 @@ def llm_answer_stream_with_db(question: str, max_rows: int = 200, precomputed: d
             docs_text = '\n\n检索结果为空：请结合通用知识作答，务必标注检索未命中。'
 
         user_prompt = f"User question:\n{question}\n\nCypher executed:\n{normalized}\n\nSample results (first {len(sample)} rows):\n{rows_text}{docs_text}"
-        messages = [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user_prompt},
-        ]
+        
+        # 构建messages：如果有历史，保留历史；否则创建新的
+        if messages and len(messages) > 0:
+            # 确保system message在最前面
+            llm_messages = [{"role": "system", "content": system}]
+            # 添加历史消息（跳过已有的system消息）
+            for msg_item in messages:
+                if msg_item.get("role") != "system":
+                    llm_messages.append(msg_item)
+            # 添加当前问题和检索结果
+            llm_messages.append({"role": "user", "content": user_prompt})
+        else:
+            llm_messages = [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user_prompt},
+            ]
 
-        stream_iter = client.chat.completions.create(model="deepseek-chat", messages=messages, stream=True)
+        stream_iter = client.chat.completions.create(model="deepseek-chat", messages=llm_messages, stream=True)
         for event in stream_iter:
             text = ''
             try:

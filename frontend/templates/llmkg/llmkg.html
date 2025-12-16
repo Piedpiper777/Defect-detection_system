@@ -19,10 +19,30 @@
     </div>
 
     <div class="split-layout">
-        <!-- 左侧：问答 -->
+        <!-- 左侧：会话列表侧边栏 -->
+        <div class="conversations-sidebar">
+            <div class="sidebar-header">
+                <button id="newConversationBtn" class="new-conversation-btn">
+                    <i class="fas fa-plus"></i> 新建对话
+                </button>
+            </div>
+            <div class="conversations-list" id="conversationsList">
+                <!-- 会话列表将在这里动态生成 -->
+            </div>
+        </div>
+
+        <!-- 中间：问答 -->
         <div class="card-panel qa-wrapper">
             <div class="panel-header">
-                <h3><i class="fas fa-comments" style="margin-right:8px;color:#2F80ED;"></i>问答助手</h3>
+                <h3 id="conversationTitle"><i class="fas fa-comments" style="margin-right:8px;color:#2F80ED;"></i>问答助手</h3>
+                <div class="panel-actions">
+                    <button id="renameConversationBtn" class="btn-viz secondary small" title="重命名对话">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button id="deleteConversationBtn" class="btn-viz secondary small" title="删除对话">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
             </div>
 
             <div class="chat-history" id="chatHistory">

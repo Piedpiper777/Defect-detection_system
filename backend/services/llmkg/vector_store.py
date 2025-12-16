@@ -98,10 +98,25 @@ def build_index_from_file(path: str, model_path: str, index_path: str = INDEX_FI
 
 def _parse_args_and_build():
     import argparse
+    import sys
     parser = argparse.ArgumentParser(description='Build FAISS index from text DB file')
-    parser.add_argument('--model-path', required=True, help='Local text2vec model path (e.g. models/Jerry0/text2vec-base-chinese)')
+    # model-path is optional: prefer explicit flag, then first positional arg, then SENT_MODEL_PATH env var, then fallback default
+    default_model = os.getenv('SENT_MODEL_PATH') or 'models/Jerry0/text2vec-base-chinese'
+    parser.add_argument('--model-path', required=False, default=default_model, help='Local text2vec model path (e.g. models/Jerry0/text2vec-base-chinese). You can also pass the model path as the first positional argument.')
     parser.add_argument('--data', default=os.path.join(os.path.dirname(__file__), '..', '..', 'data', 'text_data', 'total.jsonl'))
-    args = parser.parse_args()
+    # allow passing model path as first positional argument for backward compatibility
+    if len(sys.argv) > 1 and not sys.argv[1].startswith('-'):
+        # if user passed a positional arg, use it as model path
+        # but still let argparse parse any optional flags
+        model_pos = sys.argv[1]
+        # rebuild argv so argparse sees --model-path if not provided
+        new_argv = [sys.argv[0]] + ['--model-path', model_pos] + sys.argv[2:]
+        args = parser.parse_args(new_argv[1:])
+    else:
+        args = parser.parse_args()
+    # final check
+    if not args.model_path:
+        raise RuntimeError('model_path is required; set --model-path or SENT_MODEL_PATH env var')
     print(f'Indexing from {args.data} using model {args.model_path}...')
     build_index_from_file(args.data, args.model_path)
     print('Index built and saved.')

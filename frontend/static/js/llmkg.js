@@ -6,10 +6,311 @@ document.addEventListener('DOMContentLoaded', function() {
     const chatHistory = document.getElementById('chatHistory');
     const loadingIndicator = document.getElementById('loadingIndicator');
     const retrievalContent = document.getElementById('retrievalContent');
+    const conversationsList = document.getElementById('conversationsList');
+    const newConversationBtn = document.getElementById('newConversationBtn');
+    const renameConversationBtn = document.getElementById('renameConversationBtn');
+    const deleteConversationBtn = document.getElementById('deleteConversationBtn');
+    const conversationTitle = document.getElementById('conversationTitle');
 
     if (!questionInput || !sendButton || !charCount || !chatHistory || !loadingIndicator) {
         return;
     }
+
+    // 会话管理（使用后端API）
+    let conversations = [];
+    let currentConversationId = null;
+
+    // 从后端加载会话列表
+    async function loadConversations() {
+        try {
+            const res = await fetch('/api/llm/sessions');
+            const data = await res.json();
+            if (data.success) {
+                conversations = data.sessions || [];
+            } else {
+                console.error('加载会话失败:', data.error);
+                conversations = [];
+            }
+        } catch (e) {
+            console.error('加载会话失败:', e);
+            conversations = [];
+        }
+    }
+
+    // 创建新会话
+    async function createConversation(title = null) {
+        try {
+            const res = await fetch('/api/llm/sessions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title: title })
+            });
+            const data = await res.json();
+            if (data.success) {
+                const conversation = data.session;
+                conversations.unshift(conversation); // 添加到开头
+                await renderConversationsList();
+                await switchConversation(conversation.id);
+                return conversation;
+            } else {
+                console.error('创建会话失败:', data.error);
+                return null;
+            }
+        } catch (e) {
+            console.error('创建会话失败:', e);
+            return null;
+        }
+    }
+
+    // 删除会话
+    async function deleteConversation(id) {
+        if (confirm('确定要删除这个对话吗？')) {
+            try {
+                const res = await fetch(`/api/llm/sessions/${id}`, {
+                    method: 'DELETE'
+                });
+                const data = await res.json();
+                if (data.success) {
+                    conversations = conversations.filter(c => c.id !== id);
+                    if (currentConversationId === id) {
+                        if (conversations.length > 0) {
+                            await switchConversation(conversations[0].id);
+                        } else {
+                            await createConversation();
+                        }
+                    } else {
+                        await renderConversationsList();
+                    }
+                } else {
+                    alert('删除失败: ' + (data.error || '未知错误'));
+                }
+            } catch (e) {
+                console.error('删除会话失败:', e);
+                alert('删除失败，请重试');
+            }
+        }
+    }
+
+    // 重命名会话
+    async function renameConversation(id) {
+        const conversation = conversations.find(c => c.id === id);
+        if (!conversation) return;
+        
+        const newTitle = prompt('请输入新的对话标题:', conversation.title);
+        if (newTitle && newTitle.trim()) {
+            try {
+                const res = await fetch(`/api/llm/sessions/${id}/title`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title: newTitle.trim() })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    conversation.title = newTitle.trim();
+                    await renderConversationsList();
+                    if (currentConversationId === id) {
+                        updateConversationTitle();
+                    }
+                } else {
+                    alert('重命名失败: ' + (data.error || '未知错误'));
+                }
+            } catch (e) {
+                console.error('重命名会话失败:', e);
+                alert('重命名失败，请重试');
+            }
+        }
+    }
+
+    // 切换会话
+    async function switchConversation(id) {
+        const conversation = conversations.find(c => c.id === id);
+        if (!conversation) return;
+
+        // 保存当前会话的消息到后端
+        if (currentConversationId && conversationMessages.length > 0) {
+            await saveCurrentSessionMessages();
+        }
+
+        // 从后端加载新会话的消息
+        try {
+            const res = await fetch(`/api/llm/sessions/${id}`);
+            const data = await res.json();
+            if (data.success) {
+                currentConversationId = id;
+                conversationMessages = data.messages || [];
+                
+                // 更新会话信息
+                const idx = conversations.findIndex(c => c.id === id);
+                if (idx >= 0) {
+                    conversations[idx] = data.session;
+                }
+            } else {
+                console.error('加载会话失败:', data.error);
+                conversationMessages = [];
+            }
+        } catch (e) {
+            console.error('加载会话失败:', e);
+            conversationMessages = [];
+        }
+        
+        // 清空检索面板
+        if (retrievalContent) {
+            retrievalContent.innerHTML = '<p class="muted">暂无检索结果，若为空将基于通用知识回答。</p>';
+        }
+        
+        // 更新UI
+        await renderConversationsList();
+        renderChatHistory();
+        updateConversationTitle();
+    }
+
+    // 保存当前会话的消息到后端
+    async function saveCurrentSessionMessages() {
+        if (!currentConversationId || conversationMessages.length === 0) {
+            return;
+        }
+        
+        try {
+            const res = await fetch(`/api/llm/sessions/${currentConversationId}/messages`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ messages: conversationMessages })
+            });
+            const data = await res.json();
+            if (!data.success) {
+                console.error('保存会话消息失败:', data.error);
+            }
+        } catch (e) {
+            console.error('保存会话消息失败:', e);
+        }
+    }
+
+    // 渲染会话列表
+    async function renderConversationsList() {
+        if (!conversationsList) return;
+        
+        // 重新加载会话列表以确保最新
+        await loadConversations();
+        
+        conversationsList.innerHTML = '';
+        conversations.forEach(conv => {
+            const item = document.createElement('div');
+            item.className = 'conversation-item' + (conv.id === currentConversationId ? ' active' : '');
+            item.innerHTML = `
+                <span class="conversation-item-title" title="${conv.title}">${conv.title}</span>
+                <div class="conversation-item-actions">
+                    <button onclick="event.stopPropagation(); renameConversationById('${conv.id}')" title="重命名">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button onclick="event.stopPropagation(); deleteConversationById('${conv.id}')" title="删除">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            `;
+            item.addEventListener('click', () => switchConversation(conv.id));
+            conversationsList.appendChild(item);
+        });
+    }
+
+    // 更新对话标题
+    function updateConversationTitle() {
+        if (!conversationTitle) return;
+        const conversation = conversations.find(c => c.id === currentConversationId);
+        if (conversation) {
+            conversationTitle.innerHTML = `<i class="fas fa-comments" style="margin-right:8px;color:#2F80ED;"></i>${conversation.title}`;
+        }
+    }
+
+    // 渲染聊天历史
+    function renderChatHistory() {
+        if (!chatHistory) return;
+        
+        chatHistory.innerHTML = '';
+        
+        if (conversationMessages.length === 0) {
+            // 显示欢迎消息
+            const welcomeDiv = document.createElement('div');
+            welcomeDiv.className = 'welcome-message';
+            welcomeDiv.innerHTML = `
+                <div class="bot-avatar"><i class="fas fa-robot"></i></div>
+                <div class="message-content">
+                    <p>您好！这里可以提问缺陷检测相关的问题，同时在右侧查看图谱上下文。</p>
+                    <p>输入问题并发送，我会基于知识库给出回答。</p>
+                </div>
+            `;
+            chatHistory.appendChild(welcomeDiv);
+        } else {
+            // 渲染历史消息
+            conversationMessages.forEach(msg => {
+                if (msg.role === 'user' || msg.role === 'assistant') {
+                    addMessageToHistory(msg.content, msg.role === 'user' ? 'user' : 'bot');
+                }
+            });
+        }
+        
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+    }
+
+    // 添加消息到历史（不添加到messages数组）
+    function addMessageToHistory(content, type) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${type}`;
+
+        const avatarDiv = document.createElement('div');
+        avatarDiv.className = type === 'user' ? 'user-avatar' : 'bot-avatar';
+        avatarDiv.innerHTML = type === 'user' ? '<i class="fas fa-user"></i>' : '<i class="fas fa-robot"></i>';
+
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'message-content';
+        contentDiv.innerHTML = `<p>${content.replace(/\n/g, '<br>')}</p>`;
+
+        messageDiv.appendChild(avatarDiv);
+        messageDiv.appendChild(contentDiv);
+        chatHistory.appendChild(messageDiv);
+    }
+
+    // 全局函数供HTML调用
+    window.renameConversationById = function(id) {
+        renameConversation(id);
+    };
+
+    window.deleteConversationById = function(id) {
+        deleteConversation(id);
+    };
+
+    // 事件监听
+    if (newConversationBtn) {
+        newConversationBtn.addEventListener('click', () => createConversation());
+    }
+
+    if (renameConversationBtn) {
+        renameConversationBtn.addEventListener('click', () => {
+            if (currentConversationId) {
+                renameConversation(currentConversationId);
+            }
+        });
+    }
+
+    if (deleteConversationBtn) {
+        deleteConversationBtn.addEventListener('click', () => {
+            if (currentConversationId) {
+                deleteConversation(currentConversationId);
+            }
+        });
+    }
+
+    // 维护对话历史（messages数组），按照OpenAI格式
+    let conversationMessages = [];
+
+    // 初始化
+    (async function init() {
+        await loadConversations();
+        if (conversations.length === 0) {
+            await createConversation();
+        } else {
+            await switchConversation(conversations[0].id);
+        }
+    })();
 
     questionInput.addEventListener('input', function() {
         const length = this.value.length;
@@ -30,6 +331,10 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!question) return;
 
         addMessage(question, 'user');
+        
+        // 将用户消息添加到对话历史
+        conversationMessages.push({"role": "user", "content": question});
+        
         questionInput.value = '';
         charCount.textContent = '0';
         sendButton.disabled = true;
@@ -42,7 +347,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const res = await fetch('/api/llm/llm_answer', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ question })
+                body: JSON.stringify({ 
+                    question: question,
+                    messages: conversationMessages  // 发送对话历史
+                })
             });
 
             if (!res.ok) {
@@ -81,15 +389,30 @@ document.addEventListener('DOMContentLoaded', function() {
             const decoder = new TextDecoder('utf-8');
             const botContent = addStreamingMessage('bot');
 
+            let assistantReply = '';  // 收集完整的assistant回复
             let done = false;
             while (!done) {
                 const { value, done: streamDone } = await reader.read();
                 if (value) {
                     const chunk = decoder.decode(value, { stream: true });
+                    assistantReply += chunk;  // 累积完整回复
                     botContent.innerHTML += chunk.replace(/\n/g, '<br>');
                     chatHistory.scrollTop = chatHistory.scrollHeight;
                 }
                 done = streamDone;
+            }
+
+            // 将assistant回复添加到对话历史
+            if (assistantReply.trim()) {
+                conversationMessages.push({"role": "assistant", "content": assistantReply.trim()});
+                
+                // 保存到后端
+                if (currentConversationId) {
+                    await saveCurrentSessionMessages();
+                    // 重新加载会话列表以更新标题（如果自动生成了）
+                    await renderConversationsList();
+                    updateConversationTitle();
+                }
             }
 
             loadingIndicator.style.display = 'none';

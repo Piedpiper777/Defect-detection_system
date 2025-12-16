@@ -43,6 +43,7 @@ def llm_answer_endpoint():
     data = request.get_json() or {}
     question = (data.get('question') or '').strip()
     max_rows = int(data.get('max_rows', 200))
+    messages = data.get('messages', [])  # 接收对话历史
 
     if not question:
         return jsonify({'success': False, 'error': '问题不能为空'}), 400
@@ -82,7 +83,7 @@ def llm_answer_endpoint():
             for i in range(0, len(answer), 10):
                 yield answer[i:i+10]
         else:
-            for chunk in llm_answer_stream_with_db(question, max_rows=max_rows):
+            for chunk in llm_answer_stream_with_db(question, max_rows=max_rows, messages=messages):
                 try:
                     yield chunk
                 except GeneratorExit:
@@ -98,5 +99,99 @@ def llm_answer_endpoint():
             pass
     return resp
 
+
+@llm_bp.route('/sessions', methods=['GET'])
+def list_sessions_endpoint():
+    """获取所有会话列表"""
+    try:
+        from services.llmkg.session_service import list_sessions
+        sessions = list_sessions()
+        return jsonify({'success': True, 'sessions': sessions})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@llm_bp.route('/sessions', methods=['POST'])
+def create_session_endpoint():
+    """创建新会话"""
+    try:
+        from services.llmkg.session_service import create_session
+        data = request.get_json() or {}
+        session_id = data.get('id')
+        title = data.get('title')
+        session = create_session(session_id=session_id, title=title)
+        return jsonify({'success': True, 'session': session})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@llm_bp.route('/sessions/<session_id>', methods=['GET'])
+def get_session_endpoint(session_id):
+    """获取会话信息和消息"""
+    try:
+        from services.llmkg.session_service import get_session_info, load_session_messages
+        info = get_session_info(session_id)
+        if not info:
+            return jsonify({'success': False, 'error': '会话不存在'}), 404
+        messages = load_session_messages(session_id)
+        return jsonify({
+            'success': True,
+            'session': info,
+            'messages': messages
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@llm_bp.route('/sessions/<session_id>/messages', methods=['POST'])
+def save_session_messages_endpoint(session_id):
+    """保存会话消息"""
+    try:
+        from services.llmkg.session_service import save_session_messages
+        data = request.get_json() or {}
+        messages = data.get('messages', [])
+        if not isinstance(messages, list):
+            return jsonify({'success': False, 'error': 'messages必须是数组'}), 400
+        
+        success = save_session_messages(session_id, messages)
+        if success:
+            return jsonify({'success': True})
+        else:
+            return jsonify({'success': False, 'error': '保存失败'}), 500
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@llm_bp.route('/sessions/<session_id>/title', methods=['PUT'])
+def update_session_title_endpoint(session_id):
+    """更新会话标题"""
+    try:
+        from services.llmkg.session_service import update_session_title
+        data = request.get_json() or {}
+        title = data.get('title', '').strip()
+        if not title:
+            return jsonify({'success': False, 'error': '标题不能为空'}), 400
+        
+        success = update_session_title(session_id, title)
+        if success:
+            return jsonify({'success': True})
+        else:
+            return jsonify({'success': False, 'error': '更新失败'}), 500
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@llm_bp.route('/sessions/<session_id>', methods=['DELETE'])
+def delete_session_endpoint(session_id):
+    """删除会话"""
+    try:
+        from services.llmkg.session_service import delete_session
+        success = delete_session(session_id)
+        if success:
+            return jsonify({'success': True})
+        else:
+            return jsonify({'success': False, 'error': '删除失败'}), 500
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 

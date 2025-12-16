@@ -14,7 +14,7 @@
     <div class="page-header">
         <div class="header-content">
             <h1 class="page-title">缺陷检测问答</h1>
-            <p class="page-subtitle">基于大模型与知识图谱的缺陷知识问答</p>
+            <p class="page-subtitle">基于大模型与多源数据库的缺陷知识问答</p>
         </div>
     </div>
 
@@ -31,6 +31,32 @@
                     <div class="message-content">
                         <p>您好！这里可以提问缺陷检测相关的问题，同时在右侧查看图谱上下文。</p>
                         <p>输入问题并发送，我会基于知识库给出回答。</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 检索结果展示 -->
+            <div class="card-panel retrieval-panel" style="margin-top: 12px;">
+                <div class="panel-header">
+                    <h3><i class="fas fa-search" style="margin-right:8px;color:#2F80ED;"></i>检索到的信息</h3>
+                    <div class="panel-actions">
+                        <button id="openRetrievalModalHeader" class="btn-viz secondary small" style="display:none">查看全部</button>
+                    </div>
+                </div>
+                <div class="retrieval-content" id="retrievalContent">
+                    <p class="muted">暂无检索结果，若为空将基于通用知识回答。</p>
+                </div>
+                <!-- Modal for full retrieval list -->
+                <div id="retrievalModal" class="retrieval-modal" aria-hidden="true">
+                    <div class="modal-overlay" id="retrievalModalOverlay"></div>
+                    <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="retrievalModalTitle">
+                        <div class="modal-header">
+                            <h3 id="retrievalModalTitle">检索结果</h3>
+                            <div class="modal-actions">
+                                <button id="closeRetrievalModal" class="btn-viz small">关闭</button>
+                            </div>
+                        </div>
+                        <div class="modal-body" id="retrievalModalBody"></div>
                     </div>
                 </div>
             </div>

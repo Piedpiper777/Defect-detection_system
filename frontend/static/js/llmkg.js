@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const charCount = document.getElementById('charCount');
     const chatHistory = document.getElementById('chatHistory');
     const loadingIndicator = document.getElementById('loadingIndicator');
+    const retrievalContent = document.getElementById('retrievalContent');
 
     if (!questionInput || !sendButton || !charCount || !chatHistory || !loadingIndicator) {
         return;
@@ -36,6 +37,8 @@ document.addEventListener('DOMContentLoaded', function() {
         loadingIndicator.style.display = 'flex';
 
         try {
+            // kick off an async retrieval call so user sees documents quickly
+            fetchRetrievalDocs(question, 6).catch(err => console.warn('检索失败', err));
             const res = await fetch('/api/llm/llm_answer', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -49,6 +52,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 addMessage(err.error || '服务错误', 'bot');
                 return;
             }
+
+            // 展示检索信息（从响应头获取）
+            updateRetrievalPanel(res);
 
             // 若后端返回了生成的 Cypher（Base64），在右侧同步执行
             const cypherB64 = res.headers.get('X-Cypher-B64');
@@ -94,6 +100,200 @@ document.addEventListener('DOMContentLoaded', function() {
             sendButton.disabled = false;
             addMessage('调用大模型失败，请检查网络或服务状态。', 'bot');
             chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+    }
+
+    // Fetch vector retrieval results and render into the retrieval panel
+    async function fetchRetrievalDocs(query, k=5) {
+        if (!retrievalContent) return;
+        retrievalContent.innerHTML = '<p class="muted">检索中…</p>';
+        try {
+            const res = await fetch(`/api/kg/textdb/vector_search?q=${encodeURIComponent(query)}&k=${k}`);
+            if (!res.ok) {
+                retrievalContent.innerHTML = `<p class="muted">检索失败: ${res.status}</p>`;
+                return;
+            }
+            const data = await res.json();
+            if (!data.success) {
+                retrievalContent.innerHTML = `<p class="muted">检索失败: ${data.error || '未知错误'}</p>`;
+                return;
+            }
+            renderRetrieval(data.results || []);
+            // also try to get a cypher to update the graph quickly
+            try {
+                const cres = await fetch('/api/llm/gen_cypher', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: query, max_rows: 50 })
+                });
+                if (cres.ok) {
+                    const cdata = await cres.json();
+                    if (cdata.success && cdata.viz) {
+                        // update the cypher query input and render viz
+                        const queryInput = document.getElementById('cypherQuery');
+                        if (queryInput) queryInput.value = cdata.viz;
+                        try {
+                            if (viz) viz.clearNetwork();
+                            config.initialCypher = cdata.viz;
+                            viz = new NeoVis.default(config);
+                            viz.render();
+                            showStatus('已用检索生成的语句更新图谱', 'success');
+                        } catch (err) {
+                            console.error('渲染检索生成语句失败', err);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('gen_cypher failed', e);
+            }
+        } catch (e) {
+            console.error(e);
+            retrievalContent.innerHTML = '<p class="muted">检索异常</p>';
+        }
+    }
+
+    function _createRetrievalCard(it) {
+        const card = document.createElement('div');
+        card.className = 'retrieval-card';
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        const sc = (it.score || (it.item && it.item.score) || 0);
+        const scText = (typeof sc === 'number' && sc.toFixed) ? sc.toFixed(3) : sc;
+        meta.innerHTML = `<div><strong>#${it.item?.id ?? ''}</strong></div><div>score: ${scText}</div>`;
+        const body = document.createElement('div');
+        body.className = 'body';
+        const snippet = document.createElement('div');
+        snippet.className = 'snippet';
+        const text = it.item?.text ?? '';
+        snippet.textContent = text.length > 220 ? (text.slice(0,220) + '…') : text;
+        const full = document.createElement('div');
+        full.className = 'fulltext';
+        full.textContent = text;
+        const actions = document.createElement('div');
+        actions.className = 'actions';
+        const btnCopy = document.createElement('button');
+        btnCopy.textContent = '复制ID';
+        btnCopy.addEventListener('click', () => {
+            const id = it.item?.id ?? '';
+            if (navigator.clipboard) navigator.clipboard.writeText(String(id));
+            showStatus('已复制 id: ' + id, 'success');
+        });
+        const btnOpen = document.createElement('button');
+        btnOpen.textContent = '在文本库中查看';
+        btnOpen.addEventListener('click', () => {
+            const filter = document.getElementById('textDbFilter');
+            if (filter) { filter.value = String(it.item?.id ?? ''); filter.dispatchEvent(new Event('input')); }
+            showStatus('已跳转到文本库并筛选', 'success');
+        });
+        actions.appendChild(btnCopy);
+        actions.appendChild(btnOpen);
+
+        body.appendChild(snippet);
+        body.appendChild(full);
+        body.appendChild(actions);
+
+        card.appendChild(meta);
+        card.appendChild(body);
+        return card;
+    }
+
+    function renderRetrieval(items) {
+        if (!retrievalContent) return;
+        if (!items || !items.length) {
+            retrievalContent.innerHTML = '<p class="muted">未检索到相关信息，将基于通用知识回答。</p>';
+            return;
+        }
+
+        // Compact: show only up to two summary cards in the small container
+        retrievalContent.innerHTML = '';
+        const preview = items.slice(0, 2);
+        preview.forEach(it => {
+            const card = _createRetrievalCard(it);
+            retrievalContent.appendChild(card);
+        });
+
+        // Show header "查看全部" button when there are more items
+        const headerBtn = document.getElementById('openRetrievalModalHeader');
+        if (headerBtn) {
+            if (items.length > 2) {
+                headerBtn.style.display = 'inline-block';
+                headerBtn.textContent = `查看全部 (${items.length})`;
+                headerBtn.onclick = () => openRetrievalModal(items);
+            } else {
+                headerBtn.style.display = 'none';
+                headerBtn.onclick = null;
+            }
+        }
+
+        // ensure compact class applied when items present
+        if (items && items.length > 0) retrievalContent.classList.add('compact');
+        else retrievalContent.classList.remove('compact');
+
+        // populate modal body as well
+        const modalBody = document.getElementById('retrievalModalBody');
+        if (modalBody) {
+            modalBody.innerHTML = '';
+            items.forEach(it => {
+                const card = _createRetrievalCard(it);
+                modalBody.appendChild(card);
+            });
+        }
+    }
+
+    function openRetrievalModal(items) {
+        const modal = document.getElementById('retrievalModal');
+        const modalBody = document.getElementById('retrievalModalBody');
+        if (!modal || !modalBody) return;
+        // modalBody already populated in renderRetrieval, but ensure
+        if (items) {
+            modalBody.innerHTML = '';
+            items.forEach(it => modalBody.appendChild(_createRetrievalCard(it)));
+        }
+        modal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeRetrievalModal() {
+        const modal = document.getElementById('retrievalModal');
+        if (!modal) return;
+        modal.setAttribute('aria-hidden', 'true');
+    }
+
+    // retrieval panel reference (header button handled in renderRetrieval)
+    const retrievalPanel = document.querySelector('.retrieval-panel');
+
+    // modal controls
+    const closeRetrievalModalBtn = document.getElementById('closeRetrievalModal');
+    const retrievalModalOverlay = document.getElementById('retrievalModalOverlay');
+    if (closeRetrievalModalBtn) closeRetrievalModalBtn.addEventListener('click', closeRetrievalModal);
+    if (retrievalModalOverlay) retrievalModalOverlay.addEventListener('click', closeRetrievalModal);
+
+    function updateRetrievalPanel(res) {
+        if (!retrievalContent) return;
+        // If we've already rendered retrieval cards client-side (from vector_search),
+        // don't overwrite them with the server-sent rag text header which may be less structured.
+        if (retrievalContent.querySelector('.retrieval-card') || retrievalContent.classList.contains('compact')) {
+            return;
+        }
+
+        let ragText = '';
+        try {
+            const ragB64 = res.headers.get('X-RAG-TEXT-B64');
+            if (ragB64) {
+                const bytes = Uint8Array.from(atob(ragB64), c => c.charCodeAt(0));
+                ragText = new TextDecoder('utf-8').decode(bytes);
+            }
+        } catch (e) {
+            console.warn('解析检索结果失败', e);
+        }
+
+        if (ragText && ragText.trim().length > 0) {
+            const html = ragText
+                .split('\n')
+                .map(line => line.trim())
+                .filter(line => line.length > 0)
+                .map(line => `<p>${line.replace(/\n/g, '<br>')}</p>`)
+                .join('');
+            retrievalContent.innerHTML = html;
+        } else {
+            retrievalContent.innerHTML = '<p class="muted">未检索到相关信息，将基于通用知识回答。</p>';
         }
     }
 

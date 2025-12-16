@@ -447,7 +447,12 @@ def llm_answer_stream_with_db(question: str, max_rows: int = 200, precomputed: d
             rag_context = ""
 
         client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
-        system = "You are an assistant that answers user questions using query results and retrieved documents. Use the provided sample rows and documents to craft a concise, accurate, and human-friendly answer. If results are insufficient, say so and avoid hallucination. Clearly cite retrieved document ids when using them."
+        system = (
+            "You are an assistant that answers user questions using query results and retrieved documents. "
+            "Use the provided sample rows and documents to craft a concise, accurate, and human-friendly answer. "
+            "If retrieval is empty, explicitly say you will also rely on general domain knowledge, but avoid hallucination. "
+            "Clearly cite retrieved document ids when using them."
+        )
         docs_text = ''
         if rag_context:
             docs_text = f'\n\n检索到的相关信息:\n{rag_context}'
@@ -456,6 +461,8 @@ def llm_answer_stream_with_db(question: str, max_rows: int = 200, precomputed: d
             docs_text = '\n\nRetrieved documents:\n'
             for d in retrieved:
                 docs_text += f"[id:{d.get('id')}] {d.get('text','')[:1000]}\n"
+        else:
+            docs_text = '\n\n检索结果为空：请结合通用知识作答，务必标注检索未命中。'
 
         user_prompt = f"User question:\n{question}\n\nCypher executed:\n{normalized}\n\nSample results (first {len(sample)} rows):\n{rows_text}{docs_text}"
         messages = [

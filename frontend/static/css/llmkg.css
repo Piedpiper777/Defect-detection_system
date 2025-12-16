@@ -26,11 +26,23 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, 'S
     align-items: stretch;
     flex: 1 1 auto;
     min-height: 0;
+/* Ensure retrieval panel does not get squashed by expanding chat-history */
+.retrieval-panel {
+    flex: 0 0 auto; /* do not grow or shrink */
+    max-height: 260px; /* cap total panel height */
+    min-height: 72px;
+}
 }
 
 .right-column {
     display: flex;
     flex-direction: column;
+/* Prevent the retrieval panel content from being squashed when other elements grow */
+.retrieval-panel .retrieval-content, .retrieval-panel .panel-header { box-sizing: border-box; }
+@media (max-width: 1100px) {
+    /* smaller screens: allow retrieval to shrink a bit but keep scroll */
+    .retrieval-panel { max-height: 200px; }
+}
     gap: 12px;
     min-height: 0;
 }
@@ -72,6 +84,33 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, 'S
     font-weight: 700;
     color: var(--text);
 }
+
+.retrieval-panel .panel-actions { display:flex; gap:8px; align-items:center; }
+.retrieval-content { padding: 10px; border-radius: 8px; background: #fafcff; border: 1px solid rgba(37,99,235,0.06); max-height: 220px; overflow-y: auto; }
+/* compact view: show at most two cards (fixed height) */
+.retrieval-content.compact { max-height: 120px; min-height: 64px; overflow-y: auto; position: relative; }
+.retrieval-content::-webkit-scrollbar { width: 8px; }
+.retrieval-content::-webkit-scrollbar-thumb { background: rgba(15,23,42,0.08); border-radius: 6px; }
+.retrieval-card { padding: 10px; border-radius: 10px; background: #fff; border: 1px solid var(--border); margin-bottom: 10px; display:flex; gap:10px; align-items:flex-start; }
+.retrieval-card .meta { min-width: 110px; font-size: 12px; color: var(--muted); }
+.retrieval-card .body { flex: 1; font-size: 14px; color: var(--text); }
+.retrieval-card .body .snippet { display: none; }
+.retrieval-card .fulltext { display:block; margin-top:6px; color:#374151; max-height: 180px; overflow-y: auto; }
+.retrieval-card .actions { display:flex; gap:8px; align-items:center; margin-top:8px; }
+.retrieval-card .actions button { padding:6px 8px; border-radius:8px; border:1px solid var(--border); background:transparent; cursor:pointer; font-size:13px; }
+.retrieval-panel.collapsed .retrieval-content { max-height: 44px; overflow: hidden; }
+.retrieval-panel .view-all { margin-left: 8px; display:flex; justify-content:center; padding-top:8px; }
+.retrieval-panel .view-all .btn-viz { min-width: 140px; }
+
+/* Modal styles */
+.retrieval-modal { display: none; position: fixed; inset: 0; z-index: 1200; }
+.retrieval-modal[aria-hidden="false"] { display: block; }
+.retrieval-modal .modal-overlay { position: absolute; inset: 0; background: rgba(10, 14, 20, 0.45); }
+.retrieval-modal .modal-content { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: var(--card-bg); border-radius: 12px; width: min(920px, 95%); max-height: 80vh; overflow: hidden; border: 1px solid var(--border); display:flex; flex-direction: column; }
+.retrieval-modal .modal-header { display:flex; align-items:center; justify-content:space-between; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.retrieval-modal .modal-body { padding: 14px; overflow-y: auto; }
+.retrieval-modal .modal-body .retrieval-card { margin-bottom: 12px; }
+.btn-viz.small { padding:6px 10px; font-size:13px; }
 
 .qa-wrapper {
     display: flex;

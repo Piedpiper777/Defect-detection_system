@@ -36,6 +36,9 @@
             <div class="panel-header">
                 <h3 id="conversationTitle"><i class="fas fa-comments" style="margin-right:8px;color:#2F80ED;"></i>问答助手</h3>
                 <div class="panel-actions">
+                    <button id="memoryUpdateBtn" class="btn-viz secondary small" title="记忆更新">
+                        <i class="fas fa-memory"></i> 记忆更新
+                    </button>
                     <button id="renameConversationBtn" class="btn-viz secondary small" title="重命名对话">
                         <i class="fas fa-edit"></i>
                     </button>
@@ -91,8 +94,66 @@
                 </div>
             </div>
 
+            <!-- 记忆更新确认按钮区域 -->
+            <div id="memoryUpdateControls" style="display:none; padding: 12px; background: var(--card-bg); border-top: 1px solid var(--border); border-radius: 0 0 12px 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span>已选择 <span id="selectedCount">0</span> 条消息</span>
+                    <div style="display: flex; gap: 8px;">
+                        <button id="memoryUpdateConfirmSelectionBtn" class="btn-viz">确定</button>
+                        <button id="memoryUpdateCancelSelectionBtn" class="btn-viz secondary">取消</button>
+                    </div>
+                </div>
+            </div>
+
             <div class="loading-indicator" id="loadingIndicator">
                 <div class="spinner"></div><span>正在思考中...</span>
+            </div>
+        </div>
+
+        <!-- 记忆更新弹窗 -->
+        <div id="memoryUpdateModal" class="memory-modal" aria-hidden="true">
+            <div class="modal-overlay" id="memoryModalOverlay"></div>
+            <div class="modal-content" role="dialog" aria-modal="true">
+                <div class="modal-header">
+                    <h3 id="memoryModalTitle">记忆更新</h3>
+                    <button id="closeMemoryModal" class="btn-close">&times;</button>
+                </div>
+                <div class="modal-body" id="memoryModalBody">
+                    <div id="memoryProcessingState" style="display:none;">
+                        <div class="spinner"></div>
+                        <p>正在处理中，请稍候...</p>
+                    </div>
+                    <div id="memoryResultState" style="display:none;">
+                        <div class="memory-summary">
+                            <h4>总结内容：</h4>
+                            <div id="memorySummaryContent" class="memory-content"></div>
+                        </div>
+                        <div class="memory-actions">
+                            <button id="memoryUpdateConfirmBtn" class="btn-viz">更新</button>
+                            <button id="memoryUpdateCancelBtn" class="btn-viz secondary">取消</button>
+                        </div>
+                    </div>
+                    <div id="memoryUpdateResultState" style="display:none;">
+                        <div class="memory-update-result">
+                            <div class="result-header">
+                                <h4>更新结果</h4>
+                            </div>
+                            <div class="result-content">
+                                <div class="result-item">
+                                    <span class="result-label">关系类型：</span>
+                                    <span id="memoryRelationshipType" class="result-value"></span>
+                                </div>
+                                <div class="result-item">
+                                    <span class="result-label">处理结果：</span>
+                                    <span id="memoryUpdateMessage" class="result-value"></span>
+                                </div>
+                            </div>
+                            <div class="memory-actions">
+                                <button id="memoryUpdateCloseBtn" class="btn-viz">关闭</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 

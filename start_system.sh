@@ -25,9 +25,8 @@ NEO4J_HOME="${NEO4J_HOME:-/data/zhanggu/Project/Defect_detection_system/neo4j-co
 NEO4J_USER="${NEO4J_USER:-neo4j}"
 NEO4J_PASSWORD="${NEO4J_PASSWORD:?请在 .env 中设置 NEO4J_PASSWORD}"
 
-# 切换到 Neo4j 目录并启动
-cd "$NEO4J_HOME"
-./bin/neo4j start
+# 使用 backend/scripts 启动 Neo4j（脚本会设置 JAVA_HOME）
+bash backend/scripts/start_neo4j.sh
 
 # 返回项目根目录，然后进入backend目录
 cd "/data/zhanggu/Project/Defect_detection_system/backend"
@@ -42,7 +41,7 @@ MAX_WAIT=30
 WAIT_COUNT=0
 
 while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
-    if /data/zhanggu/Project/Defect_detection_system/neo4j-community-5.26.18/bin/neo4j status | grep -q "Neo4j is running"; then
+    if "$NEO4J_HOME/bin/neo4j" status | grep -q "Neo4j is running"; then
         echo "✅ Neo4j已准备就绪"
         break
     fi
@@ -90,7 +89,7 @@ echo "按 Ctrl+C 停止服务"
 echo ""
 
 # 等待用户中断
-trap "echo '正在停止服务...'; kill $FLASK_PID 2>/dev/null; cd backend && ./stop_neo4j.sh; exit 0" INT
+trap "echo '正在停止服务...'; kill $FLASK_PID 2>/dev/null; cd backend && ./scripts/stop_neo4j.sh; exit 0" INT
 
 # 保持脚本运行
 wait $FLASK_PID

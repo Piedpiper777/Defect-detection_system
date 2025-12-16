@@ -11,6 +11,23 @@ document.addEventListener('DOMContentLoaded', function() {
     const renameConversationBtn = document.getElementById('renameConversationBtn');
     const deleteConversationBtn = document.getElementById('deleteConversationBtn');
     const conversationTitle = document.getElementById('conversationTitle');
+    const memoryUpdateBtn = document.getElementById('memoryUpdateBtn');
+    const memoryUpdateModal = document.getElementById('memoryUpdateModal');
+    const memoryModalOverlay = document.getElementById('memoryModalOverlay');
+    const closeMemoryModal = document.getElementById('closeMemoryModal');
+    const memoryUpdateControls = document.getElementById('memoryUpdateControls');
+    const memoryUpdateConfirmSelectionBtn = document.getElementById('memoryUpdateConfirmSelectionBtn');
+    const memoryUpdateCancelSelectionBtn = document.getElementById('memoryUpdateCancelSelectionBtn');
+    const memoryUpdateConfirmBtn = document.getElementById('memoryUpdateConfirmBtn');
+    const memoryUpdateCancelBtn = document.getElementById('memoryUpdateCancelBtn');
+    const memoryUpdateCloseBtn = document.getElementById('memoryUpdateCloseBtn');
+    const memoryProcessingState = document.getElementById('memoryProcessingState');
+    const memoryResultState = document.getElementById('memoryResultState');
+    const memoryUpdateResultState = document.getElementById('memoryUpdateResultState');
+    const memorySummaryContent = document.getElementById('memorySummaryContent');
+    const memoryRelationshipType = document.getElementById('memoryRelationshipType');
+    const memoryUpdateMessage = document.getElementById('memoryUpdateMessage');
+    const selectedCount = document.getElementById('selectedCount');
 
     if (!questionInput || !sendButton || !charCount || !chatHistory || !loadingIndicator) {
         return;
@@ -241,9 +258,9 @@ document.addEventListener('DOMContentLoaded', function() {
             chatHistory.appendChild(welcomeDiv);
         } else {
             // 渲染历史消息
-            conversationMessages.forEach(msg => {
+            conversationMessages.forEach((msg, index) => {
                 if (msg.role === 'user' || msg.role === 'assistant') {
-                    addMessageToHistory(msg.content, msg.role === 'user' ? 'user' : 'bot');
+                    addMessageToHistory(msg.content, msg.role === 'user' ? 'user' : 'bot', index);
                 }
             });
         }
@@ -251,10 +268,31 @@ document.addEventListener('DOMContentLoaded', function() {
         chatHistory.scrollTop = chatHistory.scrollHeight;
     }
 
+    // 记忆更新相关状态
+    let isMemoryUpdateMode = false;
+    let selectedMessageIndices = new Set();
+    let currentMemoryId = null;
+    
+    // HTML转义函数
+    function escapeHtml(text) {
+        if (typeof text !== 'string') {
+            text = String(text);
+        }
+        return text
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
     // 添加消息到历史（不添加到messages数组）
-    function addMessageToHistory(content, type) {
+    function addMessageToHistory(content, type, index = null) {
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${type}`;
+        if (index !== null) {
+            messageDiv.dataset.messageIndex = index;
+        }
 
         const avatarDiv = document.createElement('div');
         avatarDiv.className = type === 'user' ? 'user-avatar' : 'bot-avatar';
@@ -262,11 +300,221 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const contentDiv = document.createElement('div');
         contentDiv.className = 'message-content';
-        contentDiv.innerHTML = `<p>${content.replace(/\n/g, '<br>')}</p>`;
+        // 安全地转义HTML
+        const escapedContent = escapeHtml(content).replace(/\n/g, '<br>');
+        contentDiv.innerHTML = `<p>${escapedContent}</p>`;
 
         messageDiv.appendChild(avatarDiv);
         messageDiv.appendChild(contentDiv);
         chatHistory.appendChild(messageDiv);
+        
+        // 如果处于记忆更新模式，添加勾选功能
+        if (isMemoryUpdateMode && index !== null) {
+            messageDiv.classList.add('selectable');
+            messageDiv.addEventListener('click', () => toggleMessageSelection(index, messageDiv));
+        }
+        
+        return messageDiv;
+    }
+    
+    // 切换消息选择状态
+    function toggleMessageSelection(index, messageDiv) {
+        if (selectedMessageIndices.has(index)) {
+            selectedMessageIndices.delete(index);
+            messageDiv.classList.remove('selected');
+        } else {
+            selectedMessageIndices.add(index);
+            messageDiv.classList.add('selected');
+        }
+        updateSelectedCount();
+    }
+    
+    // 更新选中数量显示
+    function updateSelectedCount() {
+        if (selectedCount) {
+            selectedCount.textContent = selectedMessageIndices.size;
+        }
+    }
+    
+    // 进入记忆更新模式
+    function enterMemoryUpdateMode() {
+        isMemoryUpdateMode = true;
+        selectedMessageIndices.clear();
+        updateSelectedCount();
+        
+        // 为所有消息添加勾选功能
+        const messages = chatHistory.querySelectorAll('.message');
+        messages.forEach((msgDiv, idx) => {
+            const msgIndex = parseInt(msgDiv.dataset.messageIndex);
+            if (!isNaN(msgIndex)) {
+                msgDiv.classList.add('selectable');
+                msgDiv.addEventListener('click', () => toggleMessageSelection(msgIndex, msgDiv));
+            }
+        });
+        
+        // 显示控制按钮
+        if (memoryUpdateControls) {
+            memoryUpdateControls.style.display = 'block';
+        }
+        
+        // 禁用记忆更新按钮
+        if (memoryUpdateBtn) {
+            memoryUpdateBtn.disabled = true;
+        }
+    }
+    
+    // 退出记忆更新模式
+    function exitMemoryUpdateMode() {
+        isMemoryUpdateMode = false;
+        selectedMessageIndices.clear();
+        
+        // 移除所有消息的勾选功能
+        const messages = chatHistory.querySelectorAll('.message.selectable');
+        messages.forEach(msgDiv => {
+            msgDiv.classList.remove('selectable', 'selected');
+        });
+        
+        // 隐藏控制按钮
+        if (memoryUpdateControls) {
+            memoryUpdateControls.style.display = 'none';
+        }
+        
+        // 启用记忆更新按钮
+        if (memoryUpdateBtn) {
+            memoryUpdateBtn.disabled = false;
+        }
+    }
+    
+    // 提交选中的消息进行总结
+    async function submitMemoryUpdate() {
+        if (selectedMessageIndices.size === 0) {
+            alert('请至少选择一条消息');
+            return;
+        }
+        
+        // 获取选中的消息
+        const selectedMessages = [];
+        selectedMessageIndices.forEach(index => {
+            if (conversationMessages[index]) {
+                selectedMessages.push(conversationMessages[index]);
+            }
+        });
+        
+        if (selectedMessages.length === 0) {
+            alert('选中的消息无效');
+            return;
+        }
+        
+        // 显示处理中弹窗
+        showMemoryModal('processing');
+        
+        try {
+            // 调用后端API进行总结
+            const res = await fetch('/api/llm/memory/summarize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ messages: selectedMessages })
+            });
+            
+            const data = await res.json();
+            
+            if (data.success) {
+                currentMemoryId = data.memory_id;
+                // 显示结果
+                showMemoryModal('result', data.memory);
+            } else {
+                alert('总结失败: ' + (data.error || '未知错误'));
+                closeMemoryModalFunc();
+            }
+        } catch (e) {
+            console.error('提交记忆更新失败:', e);
+            alert('提交失败，请重试');
+            closeMemoryModalFunc();
+        }
+        
+        // 退出记忆更新模式
+        exitMemoryUpdateMode();
+    }
+    
+    // 确认更新记忆到知识库
+    async function confirmMemoryUpdate() {
+        if (!currentMemoryId) {
+            alert('记忆ID不存在');
+            return;
+        }
+        
+        // 显示处理中状态
+        showMemoryModal('processing');
+        
+        try {
+            const res = await fetch('/api/llm/memory/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ memory_id: currentMemoryId })
+            });
+            
+            const data = await res.json();
+            
+            if (data.success) {
+                // 在弹窗中显示更新结果
+                showMemoryModal('updateResult', data);
+            } else {
+                alert('更新失败: ' + (data.error || '未知错误'));
+                showMemoryModal('result', data.memory || null);
+            }
+        } catch (e) {
+            console.error('更新记忆失败:', e);
+            alert('更新失败，请重试');
+            showMemoryModal('result', null);
+        }
+    }
+    
+    // 显示记忆弹窗
+    function showMemoryModal(state, memoryData = null) {
+        if (!memoryUpdateModal) return;
+        
+        memoryUpdateModal.setAttribute('aria-hidden', 'false');
+        
+        // 隐藏所有状态
+        if (memoryProcessingState) memoryProcessingState.style.display = 'none';
+        if (memoryResultState) memoryResultState.style.display = 'none';
+        if (memoryUpdateResultState) memoryUpdateResultState.style.display = 'none';
+        
+        if (state === 'processing') {
+            if (memoryProcessingState) memoryProcessingState.style.display = 'block';
+        } else if (state === 'result') {
+            if (memoryResultState) memoryResultState.style.display = 'block';
+            
+            if (memoryData && memorySummaryContent) {
+                memorySummaryContent.textContent = memoryData.summary || '无内容';
+            }
+        } else if (state === 'updateResult') {
+            if (memoryUpdateResultState) memoryUpdateResultState.style.display = 'block';
+            
+            // 显示关系类型
+            if (memoryData && memoryRelationshipType) {
+                const relationship = memoryData.relationship || 'unknown';
+                const relationshipText = {
+                    'high_similarity': '高度相似',
+                    'extension': '补充扩展',
+                    'difference': '存在差异'
+                }[relationship] || relationship;
+                memoryRelationshipType.textContent = relationshipText;
+                memoryRelationshipType.className = 'result-value relationship-' + relationship;
+            }
+            
+            // 显示处理结果消息
+            if (memoryData && memoryUpdateMessage) {
+                memoryUpdateMessage.textContent = memoryData.message || '处理完成';
+            }
+        }
+    }
+    
+    // 关闭记忆弹窗
+    function closeMemoryModalFunc() {
+        if (!memoryUpdateModal) return;
+        memoryUpdateModal.setAttribute('aria-hidden', 'true');
+        currentMemoryId = null;
     }
 
     // 全局函数供HTML调用
@@ -297,6 +545,45 @@ document.addEventListener('DOMContentLoaded', function() {
                 deleteConversation(currentConversationId);
             }
         });
+    }
+    
+    // 记忆更新相关事件监听
+    if (memoryUpdateBtn) {
+        memoryUpdateBtn.addEventListener('click', () => {
+            if (conversationMessages.length === 0) {
+                alert('当前对话中没有消息');
+                return;
+            }
+            enterMemoryUpdateMode();
+        });
+    }
+    
+    if (memoryUpdateConfirmSelectionBtn) {
+        memoryUpdateConfirmSelectionBtn.addEventListener('click', submitMemoryUpdate);
+    }
+    
+    if (memoryUpdateCancelSelectionBtn) {
+        memoryUpdateCancelSelectionBtn.addEventListener('click', exitMemoryUpdateMode);
+    }
+    
+    if (memoryUpdateConfirmBtn) {
+        memoryUpdateConfirmBtn.addEventListener('click', confirmMemoryUpdate);
+    }
+    
+    if (memoryUpdateCancelBtn) {
+        memoryUpdateCancelBtn.addEventListener('click', closeMemoryModalFunc);
+    }
+    
+    if (memoryUpdateCloseBtn) {
+        memoryUpdateCloseBtn.addEventListener('click', closeMemoryModalFunc);
+    }
+    
+    if (closeMemoryModal) {
+        closeMemoryModal.addEventListener('click', closeMemoryModalFunc);
+    }
+    
+    if (memoryModalOverlay) {
+        memoryModalOverlay.addEventListener('click', closeMemoryModalFunc);
     }
 
     // 维护对话历史（messages数组），按照OpenAI格式
@@ -344,6 +631,10 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             // kick off an async retrieval call so user sees documents quickly
             fetchRetrievalDocs(question, 6).catch(err => console.warn('检索失败', err));
+            
+            console.log('[DEBUG] 发送请求到 /api/llm/llm_answer');
+            console.log('[DEBUG] 对话历史长度:', conversationMessages.length);
+            
             const res = await fetch('/api/llm/llm_answer', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -353,11 +644,24 @@ document.addEventListener('DOMContentLoaded', function() {
                 })
             });
 
+            console.log('[DEBUG] 收到响应，状态:', res.status, res.statusText);
+            console.log('[DEBUG] 响应头 Content-Type:', res.headers.get('Content-Type'));
+            console.log('[DEBUG] 响应是否有body:', !!res.body);
+
             if (!res.ok) {
                 const err = await res.json().catch(() => ({ error: '服务错误' }));
+                console.error('[ERROR] 响应错误:', err);
                 loadingIndicator.style.display = 'none';
                 sendButton.disabled = false;
-                addMessage(err.error || '服务错误', 'bot');
+                addMessage('请求失败: ' + (err.error || res.statusText || '服务错误'), 'bot');
+                return;
+            }
+            
+            if (!res.body) {
+                console.error('[ERROR] 响应body为空');
+                loadingIndicator.style.display = 'none';
+                sendButton.disabled = false;
+                addMessage('响应body为空，请检查后端服务', 'bot');
                 return;
             }
 
@@ -388,23 +692,151 @@ document.addEventListener('DOMContentLoaded', function() {
             const reader = res.body.getReader();
             const decoder = new TextDecoder('utf-8');
             const botContent = addStreamingMessage('bot');
+            
+            console.log('[DEBUG] 创建流式消息容器:', !!botContent);
+            
+            if (!botContent) {
+                console.error('[ERROR] 无法创建流式消息容器');
+                loadingIndicator.style.display = 'none';
+                sendButton.disabled = false;
+                addMessage('无法创建消息容器', 'bot');
+                return;
+            }
 
             let assistantReply = '';  // 收集完整的assistant回复
             let done = false;
-            while (!done) {
-                const { value, done: streamDone } = await reader.read();
-                if (value) {
-                    const chunk = decoder.decode(value, { stream: true });
-                    assistantReply += chunk;  // 累积完整回复
-                    botContent.innerHTML += chunk.replace(/\n/g, '<br>');
-                    chatHistory.scrollTop = chatHistory.scrollHeight;
+            let hasReceivedData = false;
+            let chunkCount = 0;
+            let lastChunkTime = Date.now();
+            
+            // 设置超时（5分钟）
+            const timeoutId = setTimeout(() => {
+                if (!done) {
+                    console.error('[ERROR] 流式响应超时（5分钟），强制结束');
+                    console.error('[ERROR] 已接收chunk数量:', chunkCount);
+                    console.error('[ERROR] 已接收数据长度:', assistantReply.length);
+                    console.error('[ERROR] 最后chunk时间:', new Date(lastChunkTime).toISOString());
+                    done = true;
+                    try {
+                        reader.cancel();
+                    } catch (e) {
+                        console.error('[ERROR] 取消reader失败:', e);
+                    }
+                    if (!hasReceivedData) {
+                        addMessage('流式响应超时，未收到任何数据。请检查后端服务或网络连接。', 'bot');
+                    }
                 }
-                done = streamDone;
+            }, 5 * 60 * 1000);
+            
+            // 设置心跳检测（30秒无数据则警告）
+            const heartbeatId = setInterval(() => {
+                const timeSinceLastChunk = Date.now() - lastChunkTime;
+                if (!done && timeSinceLastChunk > 30000 && hasReceivedData) {
+                    console.warn('[WARN] 30秒未收到新数据，但流式响应仍在进行中...');
+                    console.warn('[WARN] 已接收数据:', assistantReply.substring(0, 100) + '...');
+                }
+            }, 10000);
+            
+            try {
+                console.log('[DEBUG] 开始读取流式响应');
+                while (!done) {
+                    const readStartTime = Date.now();
+                    let readResult;
+                    try {
+                        readResult = await reader.read();
+                    } catch (readErr) {
+                        console.error('[ERROR] reader.read() 抛出异常:', readErr);
+                        throw readErr;
+                    }
+                    
+                    const { value, done: streamDone } = readResult;
+                    
+                    if (value) {
+                        hasReceivedData = true;
+                        chunkCount++;
+                        lastChunkTime = Date.now();
+                        const chunk = decoder.decode(value, { stream: true });
+                        assistantReply += chunk;  // 累积完整回复
+                        
+                        console.log(`[DEBUG] 收到chunk #${chunkCount}, 长度: ${chunk.length}, 总长度: ${assistantReply.length}`);
+                        
+                        // 确保内容被正确追加（使用安全的HTML转义）
+                        if (botContent) {
+                            // 转义HTML特殊字符，然后替换换行符
+                            const escapedChunk = escapeHtml(chunk).replace(/\n/g, '<br>');
+                            botContent.innerHTML += escapedChunk;
+                            chatHistory.scrollTop = chatHistory.scrollHeight;
+                        } else {
+                            console.error('[ERROR] botContent 不存在，无法追加内容');
+                        }
+                    } else {
+                        console.log('[DEBUG] 收到空chunk');
+                    }
+                    
+                    done = streamDone;
+                    
+                    if (done) {
+                        console.log('[DEBUG] 流式响应结束，共接收', chunkCount, '个chunk，总长度:', assistantReply.length);
+                    }
+                }
+                
+                // 清除超时和心跳
+                clearTimeout(timeoutId);
+                clearInterval(heartbeatId);
+            } catch (readError) {
+                console.error('[ERROR] 流式读取异常:', readError);
+                console.error('[ERROR] 错误堆栈:', readError.stack);
+                console.error('[ERROR] 已接收chunk数量:', chunkCount);
+                console.error('[ERROR] 已接收数据长度:', assistantReply.length);
+                console.error('[ERROR] 是否收到过数据:', hasReceivedData);
+                
+                clearTimeout(timeoutId);
+                clearInterval(heartbeatId);
+                
+                if (!hasReceivedData && botContent && botContent.parentElement) {
+                    botContent.parentElement.remove();
+                }
+                if (assistantReply.trim()) {
+                    // 如果已经有部分内容，保留它
+                    console.log('[INFO] 流式读取中断，但已收到部分内容，保留已接收内容');
+                } else {
+                    const errorMsg = `流式响应读取失败: ${readError.message || readError.toString()}`;
+                    console.error('[ERROR]', errorMsg);
+                    addMessage(errorMsg, 'bot');
+                }
+            } finally {
+                // 清除超时和心跳
+                clearTimeout(timeoutId);
+                clearInterval(heartbeatId);
+                
+                console.log('[DEBUG] 清理资源，loadingIndicator将被隐藏');
+                
+                // 确保资源被释放
+                try {
+                    if (reader) {
+                        reader.releaseLock();
+                        console.log('[DEBUG] reader锁已释放');
+                    }
+                } catch (e) {
+                    console.error('[ERROR] 释放reader锁失败:', e);
+                }
+                
+                // 确保loadingIndicator被隐藏
+                loadingIndicator.style.display = 'none';
+                sendButton.disabled = false;
+                console.log('[DEBUG] loadingIndicator已隐藏，sendButton已启用');
             }
 
             // 将assistant回复添加到对话历史
             if (assistantReply.trim()) {
                 conversationMessages.push({"role": "assistant", "content": assistantReply.trim()});
+                
+                // 更新流式消息的索引（因为此时消息已经被push到conversationMessages）
+                if (botContent && botContent.parentElement) {
+                    const messageDiv = botContent.parentElement;
+                    const correctIndex = conversationMessages.length - 1;
+                    messageDiv.dataset.messageIndex = correctIndex;
+                }
                 
                 // 保存到后端
                 if (currentConversationId) {
@@ -413,15 +845,30 @@ document.addEventListener('DOMContentLoaded', function() {
                     await renderConversationsList();
                     updateConversationTitle();
                 }
+            } else {
+                // 如果没有内容，移除空消息
+                if (botContent && botContent.parentElement) {
+                    botContent.parentElement.remove();
+                }
             }
-
-            loadingIndicator.style.display = 'none';
-            sendButton.disabled = false;
         } catch (err) {
-            console.error(err);
+            console.error('[ERROR] sendQuestion 异常:', err);
+            console.error('[ERROR] 错误类型:', err.constructor.name);
+            console.error('[ERROR] 错误消息:', err.message);
+            console.error('[ERROR] 错误堆栈:', err.stack);
+            
             loadingIndicator.style.display = 'none';
             sendButton.disabled = false;
-            addMessage('调用大模型失败，请检查网络或服务状态。', 'bot');
+            
+            let errorMessage = '调用大模型失败';
+            if (err.message) {
+                errorMessage += ': ' + err.message;
+            } else if (err.toString) {
+                errorMessage += ': ' + err.toString();
+            }
+            errorMessage += '。请检查网络或服务状态。';
+            
+            addMessage(errorMessage, 'bot');
             chatHistory.scrollTop = chatHistory.scrollHeight;
         }
     }
@@ -612,7 +1059,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 .split('\n')
                 .map(line => line.trim())
                 .filter(line => line.length > 0)
-                .map(line => `<p>${line.replace(/\n/g, '<br>')}</p>`)
+                .map(line => `<p>${escapeHtml(line).replace(/\n/g, '<br>')}</p>`)
                 .join('');
             retrievalContent.innerHTML = html;
         } else {
@@ -623,6 +1070,10 @@ document.addEventListener('DOMContentLoaded', function() {
     function addMessage(content, type) {
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${type}`;
+        
+        // 添加消息索引
+        const currentIndex = conversationMessages.length;
+        messageDiv.dataset.messageIndex = currentIndex;
 
         const avatarDiv = document.createElement('div');
         avatarDiv.className = type === 'user' ? 'user-avatar' : 'bot-avatar';
@@ -630,17 +1081,30 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const contentDiv = document.createElement('div');
         contentDiv.className = 'message-content';
-        contentDiv.innerHTML = `<p>${content.replace(/\n/g, '<br>')}</p>`;
+        // 安全地转义HTML
+        const escapedContent = escapeHtml(content).replace(/\n/g, '<br>');
+        contentDiv.innerHTML = `<p>${escapedContent}</p>`;
 
         messageDiv.appendChild(avatarDiv);
         messageDiv.appendChild(contentDiv);
         chatHistory.appendChild(messageDiv);
+        
+        // 如果处于记忆更新模式，添加勾选功能
+        if (isMemoryUpdateMode) {
+            messageDiv.classList.add('selectable');
+            messageDiv.addEventListener('click', () => toggleMessageSelection(currentIndex, messageDiv));
+        }
+        
         return contentDiv;
     }
 
     function addStreamingMessage(type) {
         const messageDiv = document.createElement('div');
         messageDiv.className = `message ${type}`;
+        
+        // 添加消息索引（注意：对于流式消息，此时消息还未添加到conversationMessages，所以索引会是当前长度）
+        const currentIndex = conversationMessages.length;
+        messageDiv.dataset.messageIndex = currentIndex;
 
         const avatarDiv = document.createElement('div');
         avatarDiv.className = type === 'user' ? 'user-avatar' : 'bot-avatar';
@@ -648,11 +1112,22 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const contentDiv = document.createElement('div');
         contentDiv.className = 'message-content';
+        // 流式消息初始为空，内容会逐步追加
         contentDiv.innerHTML = '';
 
         messageDiv.appendChild(avatarDiv);
         messageDiv.appendChild(contentDiv);
         chatHistory.appendChild(messageDiv);
+        
+        // 确保消息被添加到DOM后再返回
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+        
+        // 如果处于记忆更新模式，添加勾选功能
+        if (isMemoryUpdateMode) {
+            messageDiv.classList.add('selectable');
+            messageDiv.addEventListener('click', () => toggleMessageSelection(currentIndex, messageDiv));
+        }
+        
         return contentDiv;
     }
 

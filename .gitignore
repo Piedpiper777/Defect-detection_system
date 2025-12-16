@@ -8,3 +8,4 @@ neo4j-community-5.26.18/*
 backend/logs/
 models/
 backend/data/sessions
+backups

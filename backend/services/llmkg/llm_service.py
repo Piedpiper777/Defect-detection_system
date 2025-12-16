@@ -140,12 +140,20 @@ def llm_generate_cypher(question: str, max_retries: int = 3, max_limit: int = 50
         except Exception:
             schema_text = ''
 
+    import time
+    
     for attempt in range(1, max_retries + 1):
         try:
+            # 如果是重试且上次是503错误，添加延迟
+            if attempt > 1 and last_err and ('503' in str(last_err) or 'too busy' in str(last_err).lower() or 'service_unavailable' in str(last_err).lower()):
+                wait_time = min(2 ** (attempt - 1), 10)  # 指数退避，最多10秒
+                logging.info(f"llm_generate_cypher attempt {attempt}: 等待 {wait_time} 秒后重试（服务繁忙）")
+                time.sleep(wait_time)
+            
             system = base_system.format(max_limit=max_limit)
             if schema_text:
                 system += f" Database schema (labels->properties): {schema_text}. Use only existing labels and properties."
-            if attempt > 1 and last_err:
+            if attempt > 1 and last_err and '503' not in str(last_err) and 'too busy' not in str(last_err).lower():
                 system += f" Previous attempt failed validation: {last_err}. Please correct the query."
 
             messages = [
@@ -199,8 +207,25 @@ def llm_generate_cypher(question: str, max_retries: int = 3, max_limit: int = 50
             return {'success': True, 'cypher': cypher, 'normalized': normalized}
         except Exception as e:
             last_err = str(e)
-            logging.error(f"llm_generate_cypher attempt {attempt} exception: {last_err}")
-            continue
+            error_str = str(e).lower()
+            
+            # 检测503或服务繁忙错误
+            if '503' in str(e) or 'too busy' in error_str or 'service_unavailable' in error_str:
+                logging.warning(f"llm_generate_cypher attempt {attempt}: 服务繁忙 (503)，将在下次重试时延迟")
+                if attempt == max_retries:
+                    # 最后一次重试也失败，返回友好错误
+                    return {'success': False, 'error': 'LLM服务当前繁忙，请稍后再试。如果问题持续，建议切换到其他LLM服务提供商。'}
+            else:
+                logging.error(f"llm_generate_cypher attempt {attempt} exception: {last_err}")
+            
+            # 如果不是最后一次尝试，继续重试
+            if attempt < max_retries:
+                continue
+            else:
+                # 最后一次尝试失败
+                if '503' in str(e) or 'too busy' in error_str:
+                    return {'success': False, 'error': 'LLM服务当前繁忙，请稍后再试。'}
+                break
 
     return {'success': False, 'error': f'生成合法 Cypher 失败: {last_err}'}
 
@@ -505,38 +530,55 @@ def llm_answer_stream_with_db(question: str, max_rows: int = 200, precomputed: d
                 {"role": "user", "content": user_prompt},
             ]
 
-        stream_iter = client.chat.completions.create(model="deepseek-chat", messages=llm_messages, stream=True)
-        for event in stream_iter:
-            text = ''
-            try:
-                if isinstance(event, dict):
-                    choices = event.get('choices') or []
-                    if choices:
-                        delta = choices[0].get('delta') or {}
-                        if isinstance(delta, dict):
-                            text = delta.get('content', '')
-                        else:
-                            msg = choices[0].get('message') or {}
-                            text = msg.get('content', '')
-                    else:
-                        text = event.get('text', '')
-                else:
-                    choices = getattr(event, 'choices', None)
-                    if choices:
-                        choice0 = choices[0]
-                        delta = getattr(choice0, 'delta', None)
-                        if delta:
-                            text = getattr(delta, 'content', '')
-                        else:
-                            msg = getattr(choice0, 'message', None)
-                            if msg:
-                                text = getattr(msg, 'content', '')
-                    else:
-                        text = getattr(event, 'text', '') or ''
-            except Exception:
+        try:
+            stream_iter = client.chat.completions.create(model="deepseek-chat", messages=llm_messages, stream=True)
+        except Exception as api_err:
+            error_str = str(api_err).lower()
+            if '503' in str(api_err) or 'too busy' in error_str or 'service_unavailable' in error_str:
+                logging.error(f"LLM API 503错误（服务繁忙）: {api_err}")
+                yield "[ERROR] LLM服务当前繁忙，请稍后再试。如果问题持续，建议切换到其他LLM服务提供商。"
+            else:
+                logging.error(f"LLM API调用失败: {api_err}")
+                yield f"[ERROR] 调用LLM服务失败: {str(api_err)}"
+            return
+        
+        try:
+            for event in stream_iter:
                 text = ''
+                try:
+                    if isinstance(event, dict):
+                        choices = event.get('choices') or []
+                        if choices:
+                            delta = choices[0].get('delta') or {}
+                            if isinstance(delta, dict):
+                                text = delta.get('content', '')
+                            else:
+                                msg = choices[0].get('message') or {}
+                                text = msg.get('content', '')
+                        else:
+                            text = event.get('text', '')
+                    else:
+                        choices = getattr(event, 'choices', None)
+                        if choices:
+                            choice0 = choices[0]
+                            delta = getattr(choice0, 'delta', None)
+                            if delta:
+                                text = getattr(delta, 'content', '')
+                            else:
+                                msg = getattr(choice0, 'message', None)
+                                if msg:
+                                    text = getattr(msg, 'content', '')
+                        else:
+                            text = getattr(event, 'text', '') or ''
+                except Exception as e:
+                    logging.warning(f"解析流式事件失败: {e}")
+                    text = ''
 
-            if text:
-                yield text
+                if text:
+                    yield text
+        except Exception as stream_error:
+            logging.error(f"流式响应迭代失败: {stream_error}")
+            yield f"[ERROR] 流式响应中断: {str(stream_error)}"
     except Exception as e:
+        logging.error(f"生成回答失败: {e}")
         yield f"[ERROR] 生成回答失败: {str(e)}"

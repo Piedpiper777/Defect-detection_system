@@ -220,6 +220,51 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, 'S
 .retrieval-modal .modal-body .retrieval-card { margin-bottom: 12px; }
 .btn-viz.small { padding:6px 10px; font-size:13px; }
 
+/* 记忆更新相关样式 */
+.memory-modal { display: none; position: fixed; inset: 0; z-index: 1300; }
+.memory-modal[aria-hidden="false"] { display: block; }
+.memory-modal .modal-overlay { position: absolute; inset: 0; background: rgba(10, 14, 20, 0.45); }
+.memory-modal .modal-content { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: var(--card-bg); border-radius: 12px; width: min(600px, 95%); max-height: 80vh; overflow: hidden; border: 1px solid var(--border); display:flex; flex-direction: column; }
+.memory-modal .modal-header { display:flex; align-items:center; justify-content:space-between; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.memory-modal .modal-header h3 { margin: 0; font-size: 18px; }
+.memory-modal .btn-close { background: none; border: none; font-size: 24px; color: var(--text); cursor: pointer; padding: 0; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 4px; }
+.memory-modal .btn-close:hover { background: var(--border); }
+.memory-modal .modal-body { padding: 20px; overflow-y: auto; }
+.memory-modal #memoryProcessingState { text-align: center; padding: 40px 20px; }
+.memory-modal #memoryProcessingState .spinner { margin: 0 auto 16px; }
+.memory-modal .memory-summary { margin-bottom: 20px; }
+.memory-modal .memory-summary h4 { margin: 0 0 12px 0; font-size: 16px; color: var(--text); }
+.memory-modal .memory-content { padding: 12px; background: var(--bg); border-radius: 8px; border: 1px solid var(--border); line-height: 1.6; white-space: pre-wrap; }
+.memory-modal .memory-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px; }
+
+/* 更新结果样式 */
+.memory-update-result { }
+.memory-update-result .result-header { margin-bottom: 16px; }
+.memory-update-result .result-header h4 { margin: 0; font-size: 16px; color: var(--text); }
+.memory-update-result .result-content { }
+.memory-update-result .result-item { display: flex; align-items: flex-start; margin-bottom: 12px; padding: 10px; background: var(--bg); border-radius: 6px; }
+.memory-update-result .result-label { font-weight: 600; color: var(--text); min-width: 80px; margin-right: 12px; }
+.memory-update-result .result-value { flex: 1; color: var(--text); }
+.memory-update-result .result-value.relationship-high_similarity { color: #f59e0b; font-weight: 600; }
+.memory-update-result .result-value.relationship-extension { color: #10b981; font-weight: 600; }
+.memory-update-result .result-value.relationship-difference { color: #3b82f6; font-weight: 600; }
+
+.similar-memories { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+.similar-memories h5 { margin: 0 0 12px 0; font-size: 14px; color: var(--text); }
+.similar-memories-list { display: flex; flex-direction: column; gap: 10px; }
+.similar-memory-item { padding: 10px; background: var(--bg); border-radius: 6px; border: 1px solid var(--border); }
+.similar-memory-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.similar-memory-id { font-weight: 600; color: var(--accent); }
+.similar-memory-score { font-size: 12px; color: #6b7280; }
+.similar-memory-text { font-size: 13px; color: var(--text); line-height: 1.5; }
+
+.message.selectable { position: relative; }
+.message.selectable::before { content: ''; position: absolute; left: -8px; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; border: 2px solid var(--border); border-radius: 4px; background: var(--card-bg); cursor: pointer; }
+.message.selectable.selected::before { background: var(--accent); border-color: var(--accent); }
+.message.selectable.selected::after { content: '✓'; position: absolute; left: -6px; top: 50%; transform: translateY(-50%); color: white; font-size: 14px; font-weight: bold; pointer-events: none; }
+.message.selectable { padding-left: 20px; cursor: pointer; }
+.message.selectable:hover { background: rgba(37, 99, 235, 0.05); border-radius: 8px; }
+
 .qa-wrapper {
     display: flex;
     flex-direction: column;

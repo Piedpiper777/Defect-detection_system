@@ -7,12 +7,10 @@ cause005,焊接前氧化,Cause
 cause006,焊锡膏不足,Cause
 cause007,焊锡膏过多,Cause
 cause008,层压不良,Cause
-cause009,材料杂质,Cause
 cause010,干膜粘附不当,Cause
 cause011,清洁不足,Cause
 cause012,机械应力,Cause
 cause013,热应力,Cause
-cause014,曝光能量不当,Cause
 cause015,注册不准,Cause
 cause016,高湿度环境,Cause
 cause017,镀层厚度不足,Cause

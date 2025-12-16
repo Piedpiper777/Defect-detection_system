@@ -1,5 +1,4 @@
 solution_id:ID(Solution),name,:LABEL
-solution001,重工修复,Solution
 solution002,增加刻蚀时间,Solution
 solution003,减少刻蚀时间,Solution
 solution004,优化钻孔对齐,Solution
@@ -7,12 +6,10 @@ solution005,清洁铜表面,Solution
 solution006,重新涂抹焊锡膏,Solution
 solution007,除去多余焊锡,Solution
 solution008,改善层压过程,Solution
-solution009,使用更高纯度材料,Solution
 solution010,增强干膜粘附,Solution
 solution011,改善表面清洁,Solution
 solution012,减少机械应力,Solution
 solution013,优化热分布,Solution
-solution014,调整曝光能量,Solution
 solution015,改善注册系统,Solution
 solution016,环境湿度控制,Solution
 solution017,增加镀层厚度,Solution

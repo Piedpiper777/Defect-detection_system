@@ -285,6 +285,34 @@ document.addEventListener('DOMContentLoaded', function() {
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#039;');
     }
+    
+    // Markdown解析函数（使用marked.js）
+    function parseMarkdown(markdown) {
+        if (typeof markdown !== 'string') {
+            markdown = String(markdown);
+        }
+        
+        // 检查marked.js是否可用
+        if (typeof marked !== 'undefined') {
+            try {
+                // 配置marked选项
+                marked.setOptions({
+                    breaks: true,  // 支持GFM换行
+                    gfm: true,     // 启用GitHub Flavored Markdown
+                    sanitize: false, // 不清理HTML（因为我们信任内容来源）
+                });
+                return marked.parse(markdown);
+            } catch (e) {
+                console.warn('Markdown解析失败，使用纯文本:', e);
+                // 降级到纯文本显示
+                return escapeHtml(markdown).replace(/\n/g, '<br>');
+            }
+        } else {
+            // 如果marked.js未加载，降级到纯文本
+            console.warn('marked.js未加载，使用纯文本显示');
+            return escapeHtml(markdown).replace(/\n/g, '<br>');
+        }
+    }
 
     // 添加消息到历史（不添加到messages数组）
     function addMessageToHistory(content, type, index = null) {
@@ -485,8 +513,10 @@ document.addEventListener('DOMContentLoaded', function() {
         } else if (state === 'result') {
             if (memoryResultState) memoryResultState.style.display = 'block';
             
+            // 显示总结内容（使用markdown解析）
             if (memoryData && memorySummaryContent) {
-                memorySummaryContent.textContent = memoryData.summary || '无内容';
+                const summary = memoryData.summary || '无内容';
+                memorySummaryContent.innerHTML = parseMarkdown(summary);
             }
         } else if (state === 'updateResult') {
             if (memoryUpdateResultState) memoryUpdateResultState.style.display = 'block';
@@ -760,11 +790,12 @@ document.addEventListener('DOMContentLoaded', function() {
                         
                         console.log(`[DEBUG] 收到chunk #${chunkCount}, 长度: ${chunk.length}, 总长度: ${assistantReply.length}`);
                         
-                        // 确保内容被正确追加（使用安全的HTML转义）
+                        // 确保内容被正确追加（使用markdown解析）
                         if (botContent) {
-                            // 转义HTML特殊字符，然后替换换行符
-                            const escapedChunk = escapeHtml(chunk).replace(/\n/g, '<br>');
-                            botContent.innerHTML += escapedChunk;
+                            // 累积完整的markdown内容，然后解析
+                            // 注意：这里我们直接更新innerHTML，因为marked.js会处理安全性
+                            const currentMarkdown = assistantReply;
+                            botContent.innerHTML = parseMarkdown(currentMarkdown);
                             chatHistory.scrollTop = chatHistory.scrollHeight;
                         } else {
                             console.error('[ERROR] botContent 不存在，无法追加内容');
@@ -1081,9 +1112,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const contentDiv = document.createElement('div');
         contentDiv.className = 'message-content';
-        // 安全地转义HTML
-        const escapedContent = escapeHtml(content).replace(/\n/g, '<br>');
-        contentDiv.innerHTML = `<p>${escapedContent}</p>`;
+        
+        // 对于bot消息，使用markdown解析；对于user消息，使用纯文本
+        if (type === 'bot') {
+            contentDiv.innerHTML = parseMarkdown(content);
+        } else {
+            // 用户消息使用纯文本（不解析markdown）
+            const escapedContent = escapeHtml(content).replace(/\n/g, '<br>');
+            contentDiv.innerHTML = `<p>${escapedContent}</p>`;
+        }
 
         messageDiv.appendChild(avatarDiv);
         messageDiv.appendChild(contentDiv);

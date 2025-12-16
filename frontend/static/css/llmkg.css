@@ -313,6 +313,172 @@ body { background: var(--bg); font-family: -apple-system, BlinkMacSystemFont, 'S
     font-size: 15px;
 }
 
+/* Markdown样式 */
+.message-content :deep(h1),
+.message-content :deep(h2),
+.message-content :deep(h3),
+.message-content :deep(h4),
+.message-content :deep(h5),
+.message-content :deep(h6) {
+    margin-top: 1em;
+    margin-bottom: 0.5em;
+    font-weight: 600;
+    line-height: 1.25;
+}
+
+.message-content :deep(h1) { font-size: 1.5em; }
+.message-content :deep(h2) { font-size: 1.3em; }
+.message-content :deep(h3) { font-size: 1.1em; }
+
+.message-content :deep(p) {
+    margin: 0.5em 0;
+}
+
+.message-content :deep(ul),
+.message-content :deep(ol) {
+    margin: 0.5em 0;
+    padding-left: 1.5em;
+}
+
+.message-content :deep(li) {
+    margin: 0.25em 0;
+}
+
+.message-content :deep(code) {
+    background: rgba(0, 0, 0, 0.1);
+    padding: 0.2em 0.4em;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9em;
+}
+
+.message-content :deep(pre) {
+    background: rgba(0, 0, 0, 0.05);
+    padding: 1em;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin: 0.5em 0;
+}
+
+.message-content :deep(pre code) {
+    background: none;
+    padding: 0;
+}
+
+.message-content :deep(blockquote) {
+    border-left: 3px solid rgba(0, 0, 0, 0.2);
+    padding-left: 1em;
+    margin: 0.5em 0;
+    color: rgba(0, 0, 0, 0.7);
+}
+
+.message-content :deep(table) {
+    border-collapse: collapse;
+    margin: 0.5em 0;
+    width: 100%;
+}
+
+.message-content :deep(th),
+.message-content :deep(td) {
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    padding: 0.5em;
+    text-align: left;
+}
+
+.message-content :deep(th) {
+    background: rgba(0, 0, 0, 0.05);
+    font-weight: 600;
+}
+
+.message-content :deep(a) {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+.message-content :deep(a:hover) {
+    text-decoration: underline;
+}
+
+.message-content :deep(strong) {
+    font-weight: 600;
+}
+
+.message-content :deep(em) {
+    font-style: italic;
+}
+
+.message.user .message-content :deep(h1),
+.message.user .message-content :deep(h2),
+.message.user .message-content :deep(h3),
+.message.user .message-content :deep(h4),
+.message.user .message-content :deep(h5),
+.message.user .message-content :deep(h6),
+.message.user .message-content :deep(p),
+.message.user .message-content :deep(ul),
+.message.user .message-content :deep(ol),
+.message.user .message-content :deep(blockquote),
+.message.user .message-content :deep(table) {
+    color: #fff;
+}
+
+.message.user .message-content :deep(code) {
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
+}
+
+.message.user .message-content :deep(pre) {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.message.user .message-content :deep(blockquote) {
+    border-left-color: rgba(255, 255, 255, 0.3);
+    color: rgba(255, 255, 255, 0.9);
+}
+
+/* 记忆更新弹窗中的markdown样式 */
+.memory-content :deep(h1),
+.memory-content :deep(h2),
+.memory-content :deep(h3),
+.memory-content :deep(h4),
+.memory-content :deep(h5),
+.memory-content :deep(h6) {
+    margin-top: 1em;
+    margin-bottom: 0.5em;
+    font-weight: 600;
+    line-height: 1.25;
+}
+
+.memory-content :deep(p) {
+    margin: 0.5em 0;
+}
+
+.memory-content :deep(ul),
+.memory-content :deep(ol) {
+    margin: 0.5em 0;
+    padding-left: 1.5em;
+}
+
+.memory-content :deep(code) {
+    background: rgba(0, 0, 0, 0.1);
+    padding: 0.2em 0.4em;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.9em;
+}
+
+.memory-content :deep(pre) {
+    background: rgba(0, 0, 0, 0.05);
+    padding: 1em;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin: 0.5em 0;
+}
+
+.memory-content :deep(pre code) {
+    background: none;
+    padding: 0;
+}
+
 .message.user .message-content {
     background: var(--accent);
     color: #fff;
